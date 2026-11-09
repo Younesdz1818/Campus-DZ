@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "142963853806",
+    "project_id": "campus-dz-d2a18",
+    "storage_bucket": "campus-dz-d2a18.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:142963853806:android:596f4dd81007bd1ac266ff",
+        "android_client_info": {
+          "package_name": "dz.campus.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCN-0moe_s1cBqF6s1gbkRb-OfbEmo3cf0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
