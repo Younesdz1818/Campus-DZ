@@ -27,7 +27,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Extract project
-        run: unzip -q CampusDZ_Profile_Name_Major_v1.4.zip -d extracted
+        run: unzip -q CampusDZ_Digital_Student_Card_v1.5.zip -d extracted
       - name: Build APK
         run: |
           cd extracted/CampusDZ_Android
