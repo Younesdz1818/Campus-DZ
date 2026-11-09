@@ -27,7 +27,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Extract project
-        run: unzip -q CampusDZ_Profile_Photo_Login_Fixed.zip -d extracted
+        run: unzip -q CampusDZ_Android_Login_Fix_v1.3.zip -d extracted
       - name: Build APK
         run: |
           cd extracted/CampusDZ_Android
