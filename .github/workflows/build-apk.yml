@@ -28,10 +28,14 @@ jobs:
 
       - name: Extract project
         run: unzip -q CampusDZ_Digital_Student_Card_v1.5.zip -d extracted
+
+      - name: Add Firebase config
+        run: cp google-services.json extracted/CampusDZ_Android/app/google-services.json
+
       - name: Build APK
         run: |
-          cd extracted/CampusDZ_Android
-          gradle assembleDebug
+            cd extracted/CampusDZ_Android
+            gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
