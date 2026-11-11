@@ -26,20 +26,21 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Extract project
-        run: unzip -q CampusDZ_Digital_Student_Card_v1.5.zip -d extracted
+      - name: Extract Firebase Verification package
+        run: |
+          unzip -q CampusDZ_Firebase_Verification_v2.0.zip -d package
+          unzip -q package/CampusDZ_Firebase_Verification_v2.0/CampusDZ_Digital_Student_Card_v1.5.zip -d extracted
 
       - name: Add Firebase config
         run: cp google-services.json extracted/CampusDZ_Android/app/google-services.json
 
       - name: Build APK
         run: |
-            cd extracted/CampusDZ_Android
-            gradle assembleDebug
+          cd extracted/CampusDZ_Android
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-APK
+          name: Campus-DZ-APK-v2
           path: extracted/CampusDZ_Android/app/build/outputs/apk/debug/app-debug.apk
-          
