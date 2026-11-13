@@ -1,11 +1,10 @@
-
 name: Build Campus DZ APK from ZIP
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'Campus-DZ-v2.1-source-fixed(2).zip'
+      - 'Campus-DZ-Supabase-connected-source-v2.zip'
 
 jobs:
   build:
@@ -21,16 +20,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install unzip
-        run: sudo apt-get update && sudo apt-get install -y unzip
-
       - name: Extract source ZIP
         run: |
-          unzip -q "Campus-DZ-v2.1-source-fixed(2).zip" -d source
+          unzip -q "Campus-DZ-Supabase-connected-source-v2.zip" -d source
 
       - name: Find Android project
         run: |
-          PROJECT_DIR=$(find source -name settings.gradle -o -name settings.gradle.kts | head -n 1 | xargs dirname)
+          PROJECT_DIR=$(find source -type f -name settings.gradle -o -name settings.gradle.kts | head -n 1 | xargs dirname)
           if [ -z "$PROJECT_DIR" ]; then
             echo "Android project not found"
             exit 1
