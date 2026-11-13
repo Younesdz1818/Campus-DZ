@@ -49,4 +49,3 @@ jobs:
           name: Campus-DZ-APK
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          
