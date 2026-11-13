@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -29,11 +29,8 @@ jobs:
       - name: Extract Campus DZ v2.1
         run: |
           unzip -q Campus-DZ-v2.1-source-fixed.zip -d source
-          test -d source/CampusDZ_Android
-          
-      - name: Configure Firebase
-        run: |
-          cp source/CampusDZ_Android/google-services.json source/CampusDZ_Android/app/google-services.json
+          test -f source/CampusDZ_Android/app/build.gradle
+          test -f source/CampusDZ_Android/app/google-services.json
 
       - name: Build APK
         run: |
