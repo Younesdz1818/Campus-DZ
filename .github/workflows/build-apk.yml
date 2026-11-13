@@ -1,7 +1,7 @@
 
 name: Build Campus DZ APK
 
-'on':
+on:
   workflow_dispatch:
   push:
     branches:
@@ -21,26 +21,28 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle 8.9
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract Firebase Verification package
+      - name: Extract Campus DZ v2.1
         run: |
-          unzip -q CampusDZ_Firebase_Verification_v2.0.zip -d package
-          unzip -q package/CampusDZ_Firebase_Verification_v2.0/CampusDZ_Digital_Student_Card_v1.5.zip -d extracted
-
-      - name: Add Firebase config
-        run: cp google-services.json extracted/CampusDZ_Android/app/google-services.json
+          unzip -q Campus-DZ-v2.1-source-fixed.zip -d source
+          test -d source/CampusDZ_Android
+          
+      - name: Configure Firebase
+        run: |
+          cp source/CampusDZ_Android/google-services.json source/CampusDZ_Android/app/google-services.json
 
       - name: Build APK
         run: |
-          cd extracted/CampusDZ_Android
+          cd source/CampusDZ_Android
           gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-APK-v2
-          path: extracted/CampusDZ_Android/app/build/outputs/apk/debug/app-debug.apk
+          name: Campus-DZ-v2.1-APK
+          path: source/CampusDZ_Android/app/build/outputs/apk/debug/app-debug.apk
+          
