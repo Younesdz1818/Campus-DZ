@@ -4,8 +4,6 @@ name: Build Campus DZ APK from ZIP
 on:
   workflow_dispatch:
   push:
-    paths:
-      - 'Campus-DZ-GitHub-Ready-Complete.zip'
 
 permissions:
   contents: read
@@ -15,12 +13,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download repository files
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check ZIP
+      - name: Check ZIP file
         run: |
-          test -f "Campus-DZ-GitHub-Ready-Complete.zip"
+          test -f "Campus-DZ-GitHub-Ready-Complete.zip" || {
+            echo "Campus DZ ZIP file not found"
+            exit 1
+          }
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -28,7 +29,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -39,19 +47,27 @@ jobs:
 
       - name: Find Android project
         id: project
+        shell: bash
         run: |
           SETTINGS=$(find source -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+
           if [ -z "$SETTINGS" ]; then
             echo "Android project not found"
             exit 1
           fi
+
           echo "dir=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
 
       - name: Build APK
         run: |
           gradle -p "${{ steps.project.outputs.dir }}" --no-daemon assembleDebug
+
+      - name: Prepare APK
+        run: |
           mkdir -p output
-          cp "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" output/Campus-DZ.apk
+          APK=$(find "${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug" -name "*.apk" -print -quit)
+          test -n "$APK"
+          cp "$APK" output/Campus-DZ.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
