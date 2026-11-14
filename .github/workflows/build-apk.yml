@@ -1,5 +1,5 @@
 
-name: Build Campus DZ APK
+name: Build Campus DZ v7 APK
 
 on:
   workflow_dispatch:
@@ -7,61 +7,34 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Campus DZ v6
-        shell: bash
-        run: |
-          if [ ! -f "Campus-DZ-Admin-Fixes-v6-Stats.zip" ]; then
-            echo "Version v6 ZIP not found"
-            exit 1
-          fi
-
-          mkdir -p extracted-v6
-          unzip -q Campus-DZ-Admin-Fixes-v6-Stats.zip \
-            -d extracted-v6 \
-            -x '*/README_*'
-
-          PROJECT_DIR="extracted-v6/campusdz_complete_bundle/CampusDZ_Android"
-
-          if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
-            echo "Android project not found"
-            find extracted-v6 -name settings.gradle
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Set up Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          gradle-version: '8.9'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
 
       - name: Build APK
-        shell: bash
-        run: |
-          gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
-          mkdir -p build-output
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-            build-output/Campus-DZ-v6.apk
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v6-APK
-          path: build-output/Campus-DZ-v6.apk
-          if-no-files-found: error
+          name: Campus-DZ-v7-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
