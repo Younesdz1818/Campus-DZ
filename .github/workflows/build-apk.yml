@@ -12,17 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project
+      - name: Extract Campus DZ v7
         run: |
           ZIP=$(find . -name "Campus-DZ-v7-Spark-Supabase.zip" | head -n 1)
+
           if [ -z "$ZIP" ]; then
-            echo "ZIP not found"
+            echo "ERROR: ZIP file not found"
             exit 1
           fi
-          mkdir extracted
+
+          mkdir -p extracted
           unzip -q "$ZIP" -d extracted
 
       - name: Setup Java
@@ -34,14 +36,25 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
       - name: Build APK
         working-directory: extracted/CampusDZ_Android
         run: |
+          if [ ! -f gradlew ]; then
+            echo "ERROR: gradlew not found"
+            exit 1
+          fi
+
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Campus-DZ-v7-APK
           path: extracted/CampusDZ_Android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 7
