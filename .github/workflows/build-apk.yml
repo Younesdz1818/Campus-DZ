@@ -15,26 +15,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Extract project
         run: |
           ZIP=$(find . -name "Campus-DZ-v7-Spark-Supabase.zip" | head -n 1)
           if [ -z "$ZIP" ]; then
-            echo "ZIP file not found!"
+            echo "ZIP not found"
             exit 1
           fi
-          mkdir -p extracted
+          mkdir extracted
           unzip -q "$ZIP" -d extracted
-
-      - name: Find Flutter project
-        id: project
-        run: |
-          FILE=$(find extracted -name pubspec.yaml | head -n 1)
-          if [ -z "$FILE" ]; then
-            echo "pubspec.yaml not found inside ZIP!"
-            find extracted -maxdepth 3 -type f | head -n 50
-            exit 1
-          fi
-          echo "dir=$(dirname "$FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -42,21 +31,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Install dependencies
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: flutter pub get
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Build APK
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: flutter build apk --release
+        working-directory: extracted/CampusDZ_Android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Campus-DZ-v7-APK
-          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+          path: extracted/CampusDZ_Android/app/build/outputs/apk/release/*.apk
