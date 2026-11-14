@@ -11,6 +11,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,23 +37,28 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android licenses
+      - name: Accept Android SDK licenses
         run: |
-          yes | sdkmanager --licenses || true
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          echo "Using: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses
+
+      - name: Check project files
+        run: |
+          ls -la extracted/CampusDZ_Android
+          test -f extracted/CampusDZ_Android/gradlew
 
       - name: Build APK
         working-directory: extracted/CampusDZ_Android
         run: |
-          if [ ! -f gradlew ]; then
-            echo "ERROR: gradlew not found"
-            exit 1
-          fi
-
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
