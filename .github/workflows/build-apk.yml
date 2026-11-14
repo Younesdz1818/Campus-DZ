@@ -15,6 +15,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Find Flutter project
+        id: project
+        run: |
+          FILE=$(find . -name pubspec.yaml -not -path '*/.dart_tool/*' | head -n 1)
+          if [ -z "$FILE" ]; then
+            echo "ERROR: pubspec.yaml not found"
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Flutter project found: $DIR"
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -28,13 +40,15 @@ jobs:
           cache: true
 
       - name: Install dependencies
+        working-directory: ${{ steps.project.outputs.dir }}
         run: flutter pub get
 
       - name: Build APK
+        working-directory: ${{ steps.project.outputs.dir }}
         run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Campus-DZ-v7-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
