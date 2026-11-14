@@ -26,12 +26,17 @@ jobs:
             exit 1
           fi
 
-          unzip -q Campus-DZ-Admin-Fixes-v3.zip -d extracted-v3
+          mkdir -p extracted-v3
+
+          unzip -q Campus-DZ-Admin-Fixes-v3.zip \
+            -d extracted-v3 \
+            -x '*/README_*'
 
           PROJECT_DIR="extracted-v3/campusdz_complete_bundle/CampusDZ_Android"
 
           if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
             echo "Android project not found"
+            find extracted-v3 -name settings.gradle
             exit 1
           fi
 
@@ -48,15 +53,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build Campus DZ APK
-        shell: bash
+      - name: Build APK
         run: |
           gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
 
           mkdir -p build-output
 
           cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-             build-output/Campus-DZ-v3.apk
+            build-output/Campus-DZ-v3.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
