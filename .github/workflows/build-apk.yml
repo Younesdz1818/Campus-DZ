@@ -1,3 +1,4 @@
+
 name: Build Campus DZ APK
 
 on:
@@ -16,21 +17,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Campus DZ v4
+      - name: Extract Campus DZ v4 Logout
         shell: bash
         run: |
-          if [ ! -f "Campus-DZ-Admin-Fixes-v4.zip" ]; then
-            echo "Version v4 ZIP not found"
+          if [ ! -f "Campus-DZ-Admin-Fixes-v4-Logout.zip" ]; then
+            echo "Version v4 Logout ZIP not found"
             exit 1
           fi
+
           mkdir -p extracted-v4
-          unzip -q Campus-DZ-Admin-Fixes-v4.zip -d extracted-v4 -x '*/README_*'
+
+          unzip -q Campus-DZ-Admin-Fixes-v4-Logout.zip \
+            -d extracted-v4 \
+            -x '*/README_*'
+
           PROJECT_DIR="extracted-v4/campusdz_complete_bundle/CampusDZ_Android"
+
           if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
             echo "Android project not found"
             find extracted-v4 -name settings.gradle
             exit 1
           fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
@@ -49,12 +57,12 @@ jobs:
         run: |
           gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
           mkdir -p build-output
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" build-output/Campus-DZ-v4.apk
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
+            build-output/Campus-DZ-v4-Logout.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v4-APK
-          path: build-output/Campus-DZ-v4.apk
+          name: Campus-DZ-v4-Logout-APK
+          path: build-output/Campus-DZ-v4-Logout.apk
           if-no-files-found: error
-          
