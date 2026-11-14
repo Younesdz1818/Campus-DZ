@@ -17,24 +17,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Campus DZ v5
+      - name: Extract Campus DZ v6
         shell: bash
         run: |
-          if [ ! -f "Campus-DZ-Admin-Fixes-v5.zip" ]; then
-            echo "Version v5 ZIP not found"
+          if [ ! -f "Campus-DZ-Admin-Fixes-v6-Stats.zip" ]; then
+            echo "Version v6 ZIP not found"
             exit 1
           fi
 
-          mkdir -p extracted-v5
-          unzip -q Campus-DZ-Admin-Fixes-v5.zip \
-            -d extracted-v5 \
+          mkdir -p extracted-v6
+          unzip -q Campus-DZ-Admin-Fixes-v6-Stats.zip \
+            -d extracted-v6 \
             -x '*/README_*'
 
-          PROJECT_DIR="extracted-v5/campusdz_complete_bundle/CampusDZ_Android"
+          PROJECT_DIR="extracted-v6/campusdz_complete_bundle/CampusDZ_Android"
 
           if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
             echo "Android project not found"
-            find extracted-v5 -name settings.gradle
+            find extracted-v6 -name settings.gradle
             exit 1
           fi
 
@@ -57,11 +57,11 @@ jobs:
           gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
           mkdir -p build-output
           cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-            build-output/Campus-DZ-v5.apk
+            build-output/Campus-DZ-v6.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v5-APK
-          path: build-output/Campus-DZ-v5.apk
+          name: Campus-DZ-v6-APK
+          path: build-output/Campus-DZ-v6.apk
           if-no-files-found: error
