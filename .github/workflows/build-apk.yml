@@ -35,7 +35,17 @@ jobs:
             echo "sdkmanager not found in Android SDK installation"
             exit 1
           fi
+          # sdkmanager may close the pipe after reading all answers. In that case
+          # yes exits with SIGPIPE (141), which is expected; check sdkmanager's
+          # own exit code instead of treating yes's SIGPIPE as a build failure.
+          set +e
           yes | "$SDKMANAGER" --licenses >/dev/null
+          license_status=("${PIPESTATUS[@]}")
+          set -e
+          if [[ "${license_status[1]}" -ne 0 ]]; then
+            echo "Android SDK license acceptance failed (sdkmanager exit: ${license_status[1]})"
+            exit "${license_status[1]}"
+          fi
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Set up Gradle 8.9
