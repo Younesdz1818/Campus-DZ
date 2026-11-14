@@ -1,4 +1,3 @@
-
 name: Build Campus DZ APK
 
 on:
@@ -13,33 +12,25 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Campus DZ v3
+      - name: Extract Campus DZ v4
         shell: bash
         run: |
-          if [ ! -f "Campus-DZ-Admin-Fixes-v3.zip" ]; then
-            echo "Version v3 ZIP not found"
+          if [ ! -f "Campus-DZ-Admin-Fixes-v4.zip" ]; then
+            echo "Version v4 ZIP not found"
             exit 1
           fi
-
-          mkdir -p extracted-v3
-
-          unzip -q Campus-DZ-Admin-Fixes-v3.zip \
-            -d extracted-v3 \
-            -x '*/README_*'
-
-          PROJECT_DIR="extracted-v3/campusdz_complete_bundle/CampusDZ_Android"
-
+          mkdir -p extracted-v4
+          unzip -q Campus-DZ-Admin-Fixes-v4.zip -d extracted-v4 -x '*/README_*'
+          PROJECT_DIR="extracted-v4/campusdz_complete_bundle/CampusDZ_Android"
           if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
             echo "Android project not found"
-            find extracted-v3 -name settings.gradle
+            find extracted-v4 -name settings.gradle
             exit 1
           fi
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
@@ -54,18 +45,16 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build APK
+        shell: bash
         run: |
           gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
-
           mkdir -p build-output
-
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-            build-output/Campus-DZ-v3.apk
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" build-output/Campus-DZ-v4.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v3-APK
-          path: build-output/Campus-DZ-v3.apk
+          name: Campus-DZ-v4-APK
+          path: build-output/Campus-DZ-v4.apk
           if-no-files-found: error
           
