@@ -1,82 +1,63 @@
-
-name: Build Campus DZ APK
+name: Build Campus DZ v10 Faculty News APK
 
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '**'
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Find Android SDK
+      - name: Prepare stable signing key
+        env:
+          CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
-          SDKMANAGER=$(find "$SDK_ROOT" -name sdkmanager -type f | head -n 1)
-          echo "$(dirname "$SDKMANAGER")" >> $GITHUB_PATH
-          echo "$SDK_ROOT/platform-tools" >> $GITHUB_PATH
+          test -n "$CAMPUS_KEYSTORE_BASE64" || { echo "Missing CAMPUS_KEYSTORE_BASE64 GitHub secret"; exit 1; }
+          test -n "$CAMPUS_KEYSTORE_PASSWORD" || { echo "Missing CAMPUS_KEYSTORE_PASSWORD GitHub secret"; exit 1; }
+          echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
+          echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
+          echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Accept Android licenses
+      - name: Extract Android project
         run: |
-          set +o pipefail
-          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses || true
-          set -o pipefail
+          test -f Campus-DZ-v8-News-Update.zip || { echo "Project ZIP not found"; exit 1; }
+          mkdir -p source
+          unzip -q Campus-DZ-v8-News-Update.zip -d source
+          PROJECT_DIR=$(find source -name settings.gradle -print -quit | xargs dirname)
+          test -n "$PROJECT_DIR" || { echo "settings.gradle not found in ZIP"; exit 1; }
+          echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Install SDK packages
+      - name: Build signed APK
+        env:
+          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
-          sdkmanager --sdk_root="$ANDROID_HOME" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Extract source ZIP
-        run: |
-          unzip -q Campus-DZ-v8-News-Update.zip1 -d source
-
-      - name: Locate Android project
-        run: |
-          PROJECT_FILE=$(find source -type f -name settings.gradle | head -n 1)
-
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: settings.gradle not found"
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-          echo "Project found: $PROJECT_DIR"
-
-      - name: Configure Firebase
-        run: |
-          if [ -f google-services.json ] && [ ! -f "$PROJECT_DIR/app/google-services.json" ]; then
-            cp google-services.json "$PROJECT_DIR/app/google-services.json"
-          fi
-
-      - name: Build APK
-        run: |
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
+          gradle -p "$PROJECT_DIR" --no-daemon assembleRelease
+          mkdir -p build-output
+          cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" build-output/Campus-DZ-v10.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: Campus-DZ-v10-APK
+          path: build-output/Campus-DZ-v10.apk
+          if-no-files-found: error
