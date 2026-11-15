@@ -23,11 +23,11 @@ jobs:
 
       - name: Find Android SDK
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
           SDKMANAGER=$(find "$SDK_ROOT" -name sdkmanager -type f | head -n 1)
           if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found"
+            echo "ERROR: sdkmanager not found"
             exit 1
           fi
           echo "$(dirname "$SDKMANAGER")" >> $GITHUB_PATH
@@ -46,20 +46,36 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Extract latest source ZIP
+      - name: Inspect ZIP contents
+        run: |
+          echo "=== ZIP CONTENTS ==="
+          unzip -l Campus-DZ-v8-News-Update.zip | head -80
+          echo "=== SEARCH FOR GRADLE FILES ==="
+          unzip -Z1 Campus-DZ-v8-News-Update.zip | grep -E '(^|/)(gradlew|settings.gradle|settings.gradle.kts)$' || true
+
+      - name: Extract source ZIP
         run: |
           unzip -q Campus-DZ-v8-News-Update.zip -d source
-          GRADLEW=$(find source -name gradlew -type f | head -n 1)
+
+      - name: Locate Android project
+        run: |
+          GRADLEW=$(find source -type f -name gradlew | head -n 1)
+
           if [ -z "$GRADLEW" ]; then
-            echo "ERROR: gradlew not found inside ZIP"
+            echo "ERROR: gradlew not found."
+            echo "The ZIP may not contain the complete Android project."
+            find source -maxdepth 5 -type f | head -100
             exit 1
           fi
+
           PROJECT_DIR=$(dirname "$GRADLEW")
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          echo "Android project found: $PROJECT_DIR"
 
       - name: Configure Firebase
         run: |
           if [ -f google-services.json ] && [ ! -f "$PROJECT_DIR/app/google-services.json" ]; then
+            mkdir -p "$PROJECT_DIR/app"
             cp google-services.json "$PROJECT_DIR/app/google-services.json"
           fi
 
