@@ -1,5 +1,5 @@
 
-name: Build Campus DZ v10 Faculty News APK
+name: Build Campus DZ v11 Lost Found APK
 
 on:
   workflow_dispatch:
@@ -34,40 +34,30 @@ jobs:
           CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
           CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
-          test -n "$CAMPUS_KEYSTORE_BASE64" || { echo "Missing CAMPUS_KEYSTORE_BASE64 GitHub secret"; exit 1; }
-          test -n "$CAMPUS_KEYSTORE_PASSWORD" || { echo "Missing CAMPUS_KEYSTORE_PASSWORD GitHub secret"; exit 1; }
-
+          test -n "$CAMPUS_KEYSTORE_BASE64"
+          test -n "$CAMPUS_KEYSTORE_PASSWORD"
           echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
-
           echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Extract Android project
         run: |
-          test -f Campus-DZ-v10-Faculty-News-Update.zip || { echo "Project ZIP not found"; exit 1; }
-
+          test -f Campus-DZ-v11-Lost-Found.zip
           mkdir -p source
-          unzip -q Campus-DZ-v10-Faculty-News-Update.zip -d source
-
+          unzip -q Campus-DZ-v11-Lost-Found.zip -d source
           PROJECT_DIR=$(find source -name settings.gradle -print -quit | xargs dirname)
-
-          test -n "$PROJECT_DIR" || { echo "settings.gradle not found in ZIP"; exit 1; }
-
+          test -n "$PROJECT_DIR"
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build signed APK
-        env:
-          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
           gradle -p "$PROJECT_DIR" --no-daemon assembleRelease
-
           mkdir -p build-output
-
-          cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" build-output/Campus-DZ-v10.apk
+          cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" build-output/Campus-DZ-v11.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v10-APK
-          path: build-output/Campus-DZ-v10.apk
+          name: Campus-DZ-v11-APK
+          path: build-output/Campus-DZ-v11.apk
           if-no-files-found: error
