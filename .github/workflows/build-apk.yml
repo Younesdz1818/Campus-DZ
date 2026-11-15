@@ -1,3 +1,4 @@
+
 name: Build Campus DZ v10 Faculty News APK
 
 on:
@@ -12,6 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,17 +36,23 @@ jobs:
         run: |
           test -n "$CAMPUS_KEYSTORE_BASE64" || { echo "Missing CAMPUS_KEYSTORE_BASE64 GitHub secret"; exit 1; }
           test -n "$CAMPUS_KEYSTORE_PASSWORD" || { echo "Missing CAMPUS_KEYSTORE_PASSWORD GitHub secret"; exit 1; }
+
           echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
+
           echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Extract Android project
         run: |
-          test -f Campus-DZ-v8-News-Update.zip || { echo "Project ZIP not found"; exit 1; }
+          test -f Campus-DZ-v10-Faculty-News-Update.zip || { echo "Project ZIP not found"; exit 1; }
+
           mkdir -p source
-          unzip -q Campus-DZ-v8-News-Update.zip -d source
+          unzip -q Campus-DZ-v10-Faculty-News-Update.zip -d source
+
           PROJECT_DIR=$(find source -name settings.gradle -print -quit | xargs dirname)
+
           test -n "$PROJECT_DIR" || { echo "settings.gradle not found in ZIP"; exit 1; }
+
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build signed APK
@@ -52,7 +60,9 @@ jobs:
           CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
           gradle -p "$PROJECT_DIR" --no-daemon assembleRelease
+
           mkdir -p build-output
+
           cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" build-output/Campus-DZ-v10.apk
 
       - name: Upload APK
