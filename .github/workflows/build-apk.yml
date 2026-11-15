@@ -49,7 +49,7 @@ jobs:
 
       - name: Extract source ZIP
         run: |
-          unzip -q Campus-DZ-v8-News-Update.zip -d source
+          unzip -q Campus-DZ-v8-News-Update.zip1 -d source
 
       - name: Locate Android project
         run: |
