@@ -32,33 +32,30 @@ jobs:
       - name: Extract v16 project
         run: |
           ZIP_FILE="Campus-DZ-v16.zip"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: $ZIP_FILE not found"
-            exit 1
-          fi
-
+          test -f "$ZIP_FILE"
           unzip -q "$ZIP_FILE" -d extracted
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p extracted/CampusDZ_Android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode > extracted/CampusDZ_Android/app/campus-release.keystore
+          test -s extracted/CampusDZ_Android/app/campus-release.keystore
 
       - name: Build Release APK
         working-directory: extracted/CampusDZ_Android
         env:
-          KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
+          CAMPUS_KEYSTORE_FILE: app/campus-release.keystore
+          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
+          CAMPUS_KEY_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > campus-release.jks
-
           gradle assembleRelease
 
       - name: Rename APK
         run: |
           APK=$(find extracted/CampusDZ_Android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK not found"
-            exit 1
-          fi
-
+          test -n "$APK"
           cp "$APK" Campus-DZ-v16.apk
 
       - name: Upload APK
