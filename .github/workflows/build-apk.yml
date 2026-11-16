@@ -32,10 +32,12 @@ jobs:
       - name: Extract v16 project
         run: |
           ZIP_FILE="Campus-DZ-v16.zip"
+
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: $ZIP_FILE not found"
             exit 1
           fi
+
           unzip -q "$ZIP_FILE" -d extracted
 
       - name: Build Release APK
@@ -45,13 +47,18 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > campus-release.jks
-          chmod +x gradlew
-          ./gradlew assembleRelease
+
+          gradle assembleRelease
 
       - name: Rename APK
         run: |
           APK=$(find extracted/CampusDZ_Android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          test -n "$APK"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not found"
+            exit 1
+          fi
+
           cp "$APK" Campus-DZ-v16.apk
 
       - name: Upload APK
