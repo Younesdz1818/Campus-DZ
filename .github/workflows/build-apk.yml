@@ -1,5 +1,5 @@
 
-name: Build Campus DZ v14 APK
+name: Build Campus DZ v15 APK
 
 on:
   workflow_dispatch:
@@ -50,12 +50,12 @@ jobs:
           echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Extract v14 project
+      - name: Extract v15 project
         run: |
-          ZIP_FILE="Campus-DZ-v14.zip"
+          ZIP_FILE="Campus-DZ-v15-UI.zip"
 
           test -f "$ZIP_FILE" || {
-            echo "v14 ZIP file not found: $ZIP_FILE"
+            echo "v15 ZIP file not found: $ZIP_FILE"
             exit 1
           }
 
@@ -80,11 +80,11 @@ jobs:
           mkdir -p build-output
 
           cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" \
-             build-output/Campus-DZ-v14.apk
+             build-output/Campus-DZ-v15.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v14-APK
-          path: build-output/Campus-DZ-v14.apk
+          name: Campus-DZ-v15-APK
+          path: build-output/Campus-DZ-v15.apk
           if-no-files-found: error
