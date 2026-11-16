@@ -1,5 +1,5 @@
 
-name: Build Campus DZ v15 APK
+name: Build Campus DZ v16 APK
 
 on:
   workflow_dispatch:
@@ -24,67 +24,38 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle 8.9
+      - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Prepare signing key
+      - name: Extract v16 project
+        run: |
+          ZIP_FILE="Campus-DZ-v16.zip"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE not found"
+            exit 1
+          fi
+          unzip -q "$ZIP_FILE" -d extracted
+
+      - name: Build Release APK
+        working-directory: extracted/CampusDZ_Android
         env:
-          CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
-          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
+          KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         run: |
-          test -n "$CAMPUS_KEYSTORE_BASE64" || {
-            echo "Missing keystore secret"
-            exit 1
-          }
+          echo "$KEYSTORE_BASE64" | base64 --decode > campus-release.jks
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
-          test -n "$CAMPUS_KEYSTORE_PASSWORD" || {
-            echo "Missing keystore password"
-            exit 1
-          }
-
-          echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
-
-          echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
-          echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-
-      - name: Extract v15 project
+      - name: Rename APK
         run: |
-          ZIP_FILE="Campus-DZ-v15-UI.zip"
-
-          test -f "$ZIP_FILE" || {
-            echo "v15 ZIP file not found: $ZIP_FILE"
-            exit 1
-          }
-
-          mkdir -p source
-          unzip -q "$ZIP_FILE" -d source
-
-          PROJECT_FILE=$(find source \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
-
-          test -n "$PROJECT_FILE" || {
-            echo "Android project settings.gradle not found"
-            exit 1
-          }
-
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
-
-          echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Build signed APK
-        run: |
-          gradle -p "$PROJECT_DIR" --no-daemon assembleRelease
-
-          mkdir -p build-output
-
-          cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" \
-             build-output/Campus-DZ-v15.apk
+          APK=$(find extracted/CampusDZ_Android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          test -n "$APK"
+          cp "$APK" Campus-DZ-v16.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v15-APK
-          path: build-output/Campus-DZ-v15.apk
-          if-no-files-found: error
+          name: Campus-DZ-v16-APK
+          path: Campus-DZ-v16.apk
