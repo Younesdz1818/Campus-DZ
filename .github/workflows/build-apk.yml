@@ -31,7 +31,7 @@ jobs:
 
       - name: Extract v17 project
         run: |
-          ZIP_FILE="Campus-DZ-v17.zip"
+          ZIP_FILE="Campus-DZ-v17-market-phase1.zip"
           test -f "$ZIP_FILE"
           unzip -q "$ZIP_FILE" -d extracted
 
