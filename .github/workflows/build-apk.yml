@@ -31,9 +31,15 @@ jobs:
 
       - name: Extract v17 project
         run: |
-          ZIP_FILE="Campus-DZ-v17-market-phase1.zip"
+          ZIP_FILE="Campus-DZ-v17-market-phase1-fixed.zip"
           test -f "$ZIP_FILE"
           unzip -q "$ZIP_FILE" -d extracted
+
+      - name: Verify project structure
+        run: |
+          test -f extracted/CampusDZ_Android/app/src/main/java/dz/campus/app/MainActivity.java
+          test -f extracted/CampusDZ_Android/app/src/main/assets/index.html
+          test -f extracted/CampusDZ_Android/app/build.gradle
 
       - name: Prepare signing key
         env:
