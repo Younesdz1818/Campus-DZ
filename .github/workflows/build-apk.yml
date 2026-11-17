@@ -1,5 +1,5 @@
 
-name: Build Campus DZ v16 APK
+name: Build Campus DZ v17 APK
 
 on:
   workflow_dispatch:
@@ -29,9 +29,9 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Extract v16 project
+      - name: Extract v17 project
         run: |
-          ZIP_FILE="Campus-DZ-v16.zip"
+          ZIP_FILE="Campus-DZ-v17.zip"
           test -f "$ZIP_FILE"
           unzip -q "$ZIP_FILE" -d extracted
 
@@ -57,10 +57,10 @@ jobs:
         run: |
           APK=$(find extracted/CampusDZ_Android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           test -n "$APK"
-          cp "$APK" Campus-DZ-v16.apk
+          cp "$APK" Campus-DZ-v17.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v16-APK
-          path: Campus-DZ-v16.apk
+          name: Campus-DZ-v17-APK
+          path: Campus-DZ-v17.apk
