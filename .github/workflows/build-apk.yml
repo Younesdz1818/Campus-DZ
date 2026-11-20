@@ -30,7 +30,13 @@ jobs:
           gradle-version: '8.9'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/16.0/bin" >> "$GITHUB_PATH"
+          yes | sdkmanager --licenses
 
       - name: Install Android SDK
         run: |
@@ -38,26 +44,35 @@ jobs:
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
+      - name: Verify ZIP exists
+        run: |
+          ls -lh
+          test -f Campus-DZ-v20-Native-LostFound.zip
+
       - name: Extract Campus DZ v20
         run: |
           unzip -o Campus-DZ-v20-Native-LostFound.zip -d source
-          find source -maxdepth 3 -type f | head -100
+          find source -maxdepth 4 -type f | head -100
 
       - name: Locate Android project
         run: |
-          PROJECT_DIR=$(find source -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs dirname)
+          PROJECT_DIR=$(find source -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs -r dirname)
+
           if [ -z "$PROJECT_DIR" ]; then
             PROJECT_DIR=$(find source -name gradlew -type f | head -1 | xargs -r dirname)
           fi
+
           if [ -z "$PROJECT_DIR" ]; then
-            echo "Android project not found"
+            echo "ERROR: Android project not found"
             exit 1
           fi
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Check project files
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_DIR"
+
+      - name: Verify project structure
         run: |
-          test -f "$PROJECT_DIR/gradlew" || echo "No gradlew found"
+          test -f "$PROJECT_DIR/settings.gradle" -o -f "$PROJECT_DIR/settings.gradle.kts"
           find "$PROJECT_DIR" -maxdepth 3 -type f | head -100
 
       - name: Build APK and AAB
@@ -68,8 +83,15 @@ jobs:
       - name: Collect build outputs
         run: |
           mkdir -p "$GITHUB_WORKSPACE/release"
-          find "$PROJECT_DIR" -type f \( -name "*.apk" -o -name "*.aab" \) -exec cp {} "$GITHUB_WORKSPACE/release/" \;
+
+          find "$PROJECT_DIR" -type f \
+            \( -name "*.apk" -o -name "*.aab" \) \
+            -exec cp {} "$GITHUB_WORKSPACE/release/" \;
+
+          echo "Generated files:"
           ls -lh "$GITHUB_WORKSPACE/release"
+
+          test -n "$(find "$GITHUB_WORKSPACE/release" -type f)"
 
       - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
