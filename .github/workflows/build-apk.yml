@@ -1,5 +1,5 @@
 
-name: Build Campus DZ v19 AdMob
+name: Build Campus DZ v20
 
 on:
   workflow_dispatch:
@@ -24,129 +24,57 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Android SDK
         run: |
-          set -euo pipefail
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
 
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
-              -type f -name sdkmanager | sort -V | tail -n 1)
+      - name: Extract Campus DZ v20
+        run: |
+          unzip -o Campus-DZ-v20-Native-LostFound.zip -d source
+          find source -maxdepth 3 -type f | head -100
+
+      - name: Locate Android project
+        run: |
+          PROJECT_DIR=$(find source -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs dirname)
+          if [ -z "$PROJECT_DIR" ]; then
+            PROJECT_DIR=$(find source -name gradlew -type f | head -1 | xargs -r dirname)
           fi
-
-          test -x "$SDKMANAGER"
-
-          yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" --install \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "platform-tools"
-
-      - name: Extract v19 project
-        run: |
-          set -euo pipefail
-
-          ZIP_FILE="Campus-DZ-v19-AdMob-test.zip"
-
-          test -f "$ZIP_FILE" || {
-            echo "ERROR: v19 ZIP file not found in repository root"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Android project not found"
             exit 1
-          }
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          mkdir -p extracted
-          unzip -q "$ZIP_FILE" -d extracted
-
-      - name: Verify project structure
+      - name: Check project files
         run: |
-          set -euo pipefail
+          test -f "$PROJECT_DIR/gradlew" || echo "No gradlew found"
+          find "$PROJECT_DIR" -maxdepth 3 -type f | head -100
 
-          PROJECT="extracted/CampusDZ_Android"
-
-          test -f "$PROJECT/settings.gradle"
-          test -f "$PROJECT/build.gradle"
-          test -f "$PROJECT/app/build.gradle"
-          test -f "$PROJECT/app/src/main/AndroidManifest.xml"
-          test -f "$PROJECT/app/src/main/java/dz/campus/app/MainActivity.java"
-          test -f "$PROJECT/app/src/main/assets/index.html"
-
-          echo "Project structure verified."
-
-      - name: Verify Android configuration
+      - name: Build APK and AAB
         run: |
-          set -euo pipefail
-
-          grep -q "minSdk 24" extracted/CampusDZ_Android/app/build.gradle
-          grep -q "versionCode 12" extracted/CampusDZ_Android/app/build.gradle
-          grep -q "ads-mobile-sdk" extracted/CampusDZ_Android/app/build.gradle
-
-          echo "Android configuration verified."
-
-      - name: Prepare signing key
-        env:
-          KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-
-          test -n "$KEYSTORE_BASE64" || {
-            echo "Missing CAMPUS_KEYSTORE_BASE64 secret"
-            exit 1
-          }
-
-          mkdir -p extracted/CampusDZ_Android/app
-
-          echo "$KEYSTORE_BASE64" | base64 --decode \
-            > extracted/CampusDZ_Android/app/campus-release.keystore
-
-          test -s extracted/CampusDZ_Android/app/campus-release.keystore
-
-      - name: Build Release APK and AAB
-        working-directory: extracted/CampusDZ_Android
-        env:
-          CAMPUS_KEYSTORE_FILE: campus-release.keystore
-          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
-          CAMPUS_KEY_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          test -n "$CAMPUS_KEYSTORE_PASSWORD"
-
+          cd "$PROJECT_DIR"
           gradle --no-daemon assembleRelease bundleRelease
 
-      - name: Prepare release files
+      - name: Collect build outputs
         run: |
-          set -euo pipefail
-
-          PROJECT="extracted/CampusDZ_Android"
-
-          APK="$PROJECT/app/build/outputs/apk/release/app-release.apk"
-          AAB="$PROJECT/app/build/outputs/bundle/release/app-release.aab"
-
-          test -f "$APK" || {
-            echo "Release APK not found"
-            exit 1
-          }
-
-          test -f "$AAB" || {
-            echo "Release AAB not found"
-            exit 1
-          }
-
-          mkdir -p build-output
-
-          cp "$APK" build-output/Campus-DZ-v19.apk
-          cp "$AAB" build-output/Campus-DZ-v19.aab
-
-          ls -lh build-output
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          find "$PROJECT_DIR" -type f \( -name "*.apk" -o -name "*.aab" \) -exec cp {} "$GITHUB_WORKSPACE/release/" \;
+          ls -lh "$GITHUB_WORKSPACE/release"
 
       - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v19-Release
-          path: build-output/*
+          name: Campus-DZ-v20
+          path: release/*
           if-no-files-found: error
+          retention-days: 30
