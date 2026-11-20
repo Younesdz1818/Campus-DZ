@@ -51,14 +51,14 @@ jobs:
             exit 1
           }
 
-          echo "$CAMPUS_KEYSTORE_BASE64" \
-            | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
+          echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
 
           test -s "$RUNNER_TEMP/campus-release.keystore"
 
           echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
+          echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          
+
           echo "Signing key prepared successfully."
 
       # 5. العثور على Android SDK
@@ -70,8 +70,7 @@ jobs:
           export ANDROID_HOME=/usr/local/lib/android/sdk
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-          SDKMANAGER=$(find "$ANDROID_HOME" \
-            -type f -name sdkmanager 2>/dev/null | head -n 1)
+          SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)
 
           if [ -z "$SDKMANAGER" ]; then
             echo "ERROR: sdkmanager not found"
@@ -98,14 +97,20 @@ jobs:
 
       # 7. التأكد من وجود ZIP
       - name: Verify project ZIP
+        shell: bash
         run: |
+          set -e
+
           test -f "Campus-DZ-v20-Native-LostFound.zip" || {
             echo "ERROR: Campus-DZ-v20-Native-LostFound.zip not found"
             exit 1
           }
 
+          echo "Project ZIP found."
+
       # 8. استخراج المشروع
       - name: Extract Campus DZ
+        shell: bash
         run: |
           set -e
 
@@ -127,6 +132,7 @@ jobs:
 
       # 9. التأكد من ملفات المشروع
       - name: Verify Android project
+        shell: bash
         run: |
           set -e
 
