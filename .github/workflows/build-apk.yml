@@ -30,7 +30,7 @@ jobs:
 
       - name: Extract v18 project
         run: |
-          ZIP_FILE="Campus-DZ-v18-market-chat.zip"
+          ZIP_FILE="Campus-DZ-v18-market-chat-fixed.zip"
           test -f "$ZIP_FILE"
           unzip -q "$ZIP_FILE" -d extracted
 
