@@ -1,5 +1,5 @@
 
-name: Build Campus DZ v20
+name: Build Campus DZ v20 APK and AAB
 
 on:
   workflow_dispatch:
@@ -15,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. تحميل المشروع
+      # 1. تحميل المستودع
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. إعداد Java
+      # 2. إعداد Java 17
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -27,26 +27,54 @@ jobs:
           java-version: '17'
 
       # 3. إعداد Gradle
-      - name: Set up Gradle
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      # 4. العثور على Android SDK و sdkmanager
+      # 4. تجهيز مفتاح التوقيع من GitHub Secrets
+      - name: Prepare signing key
+        env:
+          CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          set -e
+
+          test -n "$CAMPUS_KEYSTORE_BASE64" || {
+            echo "ERROR: Missing CAMPUS_KEYSTORE_BASE64"
+            exit 1
+          }
+
+          test -n "$CAMPUS_KEYSTORE_PASSWORD" || {
+            echo "ERROR: Missing CAMPUS_KEYSTORE_PASSWORD"
+            exit 1
+          }
+
+          echo "$CAMPUS_KEYSTORE_BASE64" \
+            | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
+
+          test -s "$RUNNER_TEMP/campus-release.keystore"
+
+          echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
+          echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          
+          echo "Signing key prepared successfully."
+
+      # 5. العثور على Android SDK
       - name: Locate Android SDK
         shell: bash
         run: |
           set -e
 
           export ANDROID_HOME=/usr/local/lib/android/sdk
-
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-          SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)
+          SDKMANAGER=$(find "$ANDROID_HOME" \
+            -type f -name sdkmanager 2>/dev/null | head -n 1)
 
           if [ -z "$SDKMANAGER" ]; then
             echo "ERROR: sdkmanager not found"
-            find "$ANDROID_HOME" -maxdepth 5 -type d
             exit 1
           fi
 
@@ -54,16 +82,11 @@ jobs:
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
-          echo "Found SDK manager:"
-          echo "$SDKMANAGER"
-
-      # 5. تثبيت تراخيص ومكونات Android
+      # 6. تثبيت Android SDK
       - name: Install Android SDK
         shell: bash
         run: |
           set -e
-
-          "$SDKMANAGER" --version
 
           set +o pipefail
           yes | "$SDKMANAGER" --licenses || true
@@ -73,105 +96,90 @@ jobs:
           "$SDKMANAGER" "platforms;android-35"
           "$SDKMANAGER" "build-tools;35.0.0"
 
-      # 6. التأكد من وجود ملف v20
-      - name: Verify ZIP
+      # 7. التأكد من وجود ZIP
+      - name: Verify project ZIP
         run: |
-          echo "Repository files:"
-          ls -lah
-
-          if [ ! -f "Campus-DZ-v20-Native-LostFound.zip" ]; then
+          test -f "Campus-DZ-v20-Native-LostFound.zip" || {
             echo "ERROR: Campus-DZ-v20-Native-LostFound.zip not found"
             exit 1
-          fi
+          }
 
-      # 7. استخراج المشروع
-      - name: Extract Campus DZ v20
+      # 8. استخراج المشروع
+      - name: Extract Campus DZ
         run: |
+          set -e
+
           mkdir -p source
 
-          unzip -o Campus-DZ-v20-Native-LostFound.zip -d source
-
-          echo "Extracted files:"
-          find source -maxdepth 4 -type f | head -100
-
-      # 8. العثور على مجلد مشروع Android
-      - name: Locate Android project
-        shell: bash
-        run: |
-          set -e
+          unzip -q Campus-DZ-v20-Native-LostFound.zip -d source
 
           PROJECT_DIR=$(find source -type f \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
-            -print -quit | xargs -r dirname)
+            -name settings.gradle -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            PROJECT_DIR=$(find source -type f -name gradlew \
-              -print -quit | xargs -r dirname)
-          fi
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project not found"
+            echo "ERROR: settings.gradle not found"
             exit 1
           fi
 
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project directory:"
-          echo "$PROJECT_DIR"
+          echo "Project found: $PROJECT_DIR"
 
-      # 9. التحقق من ملفات المشروع
-      - name: Verify project
+      # 9. التأكد من ملفات المشروع
+      - name: Verify Android project
         run: |
-          echo "Project structure:"
-          ls -lah "$PROJECT_DIR"
+          set -e
 
-          if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/build.gradle.kts" ] && \
-             [ ! -f "$PROJECT_DIR/settings.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
-            echo "ERROR: Gradle project files not found"
-            exit 1
-          fi
+          test -f "$PROJECT_DIR/build.gradle"
+          test -f "$PROJECT_DIR/app/build.gradle"
+          test -f "$PROJECT_DIR/settings.gradle"
+          test -f "$PROJECT_DIR/app/google-services.json"
 
-      # 10. بناء APK و AAB
-      - name: Build APK and AAB
+          echo "Android project verified."
+
+      # 10. بناء APK و AAB بالتوقيع
+      - name: Build signed APK and AAB
         shell: bash
         run: |
           set -e
 
-          cd "$PROJECT_DIR"
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew --no-daemon assembleRelease bundleRelease
-          else
-            gradle --no-daemon assembleRelease bundleRelease
-          fi
+          gradle -p "$PROJECT_DIR" \
+            --no-daemon \
+            clean \
+            assembleRelease \
+            bundleRelease
 
       # 11. جمع ملفات البناء
-      - name: Collect build outputs
+      - name: Collect APK and AAB
+        shell: bash
         run: |
           set -e
 
-          mkdir -p "$GITHUB_WORKSPACE/release"
+          mkdir -p release
 
-          find "$PROJECT_DIR" -type f \
-            \( -name "*.apk" -o -name "*.aab" \) \
-            -exec cp {} "$GITHUB_WORKSPACE/release/" \;
+          APK="$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk"
+          AAB="$PROJECT_DIR/app/build/outputs/bundle/release/app-release.aab"
 
-          echo "Build outputs:"
-          ls -lh "$GITHUB_WORKSPACE/release"
-
-          if [ -z "$(find "$GITHUB_WORKSPACE/release" -type f)" ]; then
-            echo "ERROR: No APK or AAB generated"
+          test -f "$APK" || {
+            echo "ERROR: APK not generated"
             exit 1
-          fi
+          }
 
-      # 12. رفع الملفات
-      - name: Upload APK and AAB
+          test -f "$AAB" || {
+            echo "ERROR: AAB not generated"
+            exit 1
+          }
+
+          cp "$APK" release/Campus-DZ-v20.apk
+          cp "$AAB" release/Campus-DZ-v20.aab
+
+          ls -lh release/
+
+      # 12. رفع ملفات APK و AAB
+      - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v20
+          name: Campus-DZ-v20-Release
           path: release/*
           if-no-files-found: error
           retention-days: 30
