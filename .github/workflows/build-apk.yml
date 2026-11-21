@@ -103,7 +103,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Library-Admin-Interface-Fixed.zip"
+          ZIP_FILE="Campus-DZ-v22-Library-Admin-Review-Panel-Fixed.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: $ZIP_FILE not found in repository root"
@@ -121,7 +121,7 @@ jobs:
 
           mkdir -p source
 
-          unzip -q Campus-DZ-v22-Library-Admin-Interface-Fixed.zip -d source
+          unzip -q Campus-DZ-v22-Library-Admin-Review-Panel-Fixed.zip -d source
 
           PROJECT_DIR=$(find source -type f \
             \( -name settings.gradle -o -name settings.gradle.kts \) \
