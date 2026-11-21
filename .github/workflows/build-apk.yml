@@ -25,84 +25,186 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 3. إعداد Gradle
-      - name: Set up Gradle
+      # 3. إعداد Gradle 8.9
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      # 4. إعداد Android SDK
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      # 5. تثبيت Android SDK 35
-      - name: Install Android SDK packages
+      # 4. تجهيز مفتاح التوقيع
+      - name: Prepare signing key
+        env:
+          CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
+        shell: bash
         run: |
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-          yes | sdkmanager --licenses
+          set -e
 
-      # 6. استخراج مشروع Campus DZ v22 التشخيصي
-      - name: Extract Campus DZ v22 Diagnostic
+          test -n "$CAMPUS_KEYSTORE_BASE64" || {
+            echo "ERROR: CAMPUS_KEYSTORE_BASE64 is missing"
+            exit 1
+          }
+
+          test -n "$CAMPUS_KEYSTORE_PASSWORD" || {
+            echo "ERROR: CAMPUS_KEYSTORE_PASSWORD is missing"
+            exit 1
+          }
+
+          echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
+
+          test -s "$RUNNER_TEMP/campus-release.keystore"
+
+          echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
+          echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
+          echo "Signing key prepared."
+
+      # 5. تحديد Android SDK
+      - name: Locate Android SDK
+        shell: bash
         run: |
+          set -e
+
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+          SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+      # 6. تثبيت Android SDK
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses || true
+          set -o pipefail
+
+          "$SDKMANAGER" "platform-tools"
+          "$SDKMANAGER" "platforms;android-35"
+          "$SDKMANAGER" "build-tools;35.0.0"
+
+          echo "Android SDK installed."
+
+      # 7. التحقق من ملف المشروع
+      - name: Verify project ZIP
+        shell: bash
+        run: |
+          set -e
+
           ZIP_FILE="Campus-DZ-v22-Library-Diagnostic.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found: $ZIP_FILE"
+            echo "ERROR: $ZIP_FILE not found in repository root"
+            ls -lah
             exit 1
           fi
+
+          echo "Campus DZ v22 Diagnostic ZIP found."
+
+      # 8. استخراج المشروع
+      - name: Extract Campus DZ
+        shell: bash
+        run: |
+          set -e
+
+          ZIP_FILE="Campus-DZ-v22-Library-Diagnostic.zip"
 
           mkdir -p source
           unzip -q "$ZIP_FILE" -d source
 
-          if [ ! -f "source/CampusDZ_Android/app/build.gradle" ]; then
-            echo "ERROR: Android project not found inside ZIP"
-            find source -maxdepth 3 -type f | head -50
+          PROJECT_DIR=$(find source -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Gradle settings file not found"
+            find source -maxdepth 5 -type f
             exit 1
           fi
 
-      # 7. إعداد مفتاح التوقيع
-      - name: Decode Android Keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+          echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Project found: $PROJECT_DIR"
+
+      # 9. التحقق من ملفات Android
+      - name: Verify Android project
+        shell: bash
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "ERROR: CAMPUS_KEYSTORE_BASE64 secret is missing"
+          set -e
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
+             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: app Gradle file not found"
             exit 1
           fi
 
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
-
-          if [ ! -s "$RUNNER_TEMP/campus-release.keystore" ]; then
-            echo "ERROR: Keystore file is empty"
+          if [ ! -f "$PROJECT_DIR/app/google-services.json" ]; then
+            echo "ERROR: google-services.json not found"
             exit 1
           fi
 
-      # 8. بناء APK و AAB
-      - name: Build Release APK and AAB
-        working-directory: source/CampusDZ_Android
-        env:
-          CAMPUS_KEYSTORE_FILE: ${{ runner.temp }}/campus-release.keystore
-          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
-          CAMPUS_KEY_PASSWORD: ${{ secrets.CAMPUS_KEY_PASSWORD }}
-        run: |
-          gradle --no-daemon clean assembleRelease bundleRelease
+          echo "Android project verified."
 
-      # 9. تجهيز ملفات الإصدار
-      - name: Prepare release files
+      # 10. بناء APK و AAB
+      - name: Build signed APK and AAB
+        shell: bash
         run: |
+          set -e
+
+          gradle -p "$PROJECT_DIR" \
+            --no-daemon \
+            clean \
+            assembleRelease \
+            bundleRelease
+
+          echo "Build completed."
+
+      # 11. جمع ملفات الإصدار
+      - name: Collect APK and AAB
+        shell: bash
+        run: |
+          set -e
+
           mkdir -p release
 
-          cp source/CampusDZ_Android/app/build/outputs/apk/release/*.apk release/
-          cp source/CampusDZ_Android/app/build/outputs/bundle/release/*.aab release/
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk" \
+            -type f -name '*.apk' -print -quit)
 
+          AAB=$(find "$PROJECT_DIR/app/build/outputs/bundle" \
+            -type f -name '*.aab' -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not generated"
+            exit 1
+          fi
+
+          if [ -z "$AAB" ]; then
+            echo "ERROR: AAB not generated"
+            exit 1
+          fi
+
+          cp "$APK" release/Campus-DZ-v22-Diagnostic.apk
+          cp "$AAB" release/Campus-DZ-v22-Diagnostic.aab
+
+          echo "Release files collected:"
           ls -lh release/
 
-      # 10. رفع APK و AAB
-      - name: Upload Campus DZ v22 Release
+      # 12. رفع APK و AAB
+      - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
           name: Campus-DZ-v22-Diagnostic-Release
-          path: release/
+          path: release/*
           if-no-files-found: error
           retention-days: 30
