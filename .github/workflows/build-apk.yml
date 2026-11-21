@@ -121,7 +121,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed.zip"
+          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed(1).zip"
 
           mkdir -p source
           unzip -q "$ZIP_FILE" -d source
