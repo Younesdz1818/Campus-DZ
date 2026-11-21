@@ -85,8 +85,10 @@ jobs:
         run: |
           set -e
 
-          test -f "Campus-DZ-v22-Library-Integration.zip" || {
-            echo "ERROR: Campus-DZ-v22-Library-Integration.zip not found"
+          ZIP_FILE="Campus-DZ-v22-Library-Integration-Fixed.zip"
+
+          test -f "$ZIP_FILE" || {
+            echo "ERROR: $ZIP_FILE not found in repository root"
             ls -lah
             exit 1
           }
@@ -100,7 +102,7 @@ jobs:
 
           mkdir -p source
 
-          unzip -q Campus-DZ-v22-Library-Integration.zip -d source
+          unzip -q Campus-DZ-v22-Library-Integration-Fixed.zip -d source
 
           PROJECT_DIR=$(find source -type f \
             -name settings.gradle -print -quit | xargs -r dirname)
