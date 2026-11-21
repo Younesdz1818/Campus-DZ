@@ -26,7 +26,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 3. إعداد Gradle
+      # 3. إعداد Gradle 8.9
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -103,7 +103,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Library-Integration-Fixed.zip"
+          ZIP_FILE="Campus-DZ-v22-Library-Admin-Interface-Fixed.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: $ZIP_FILE not found in repository root"
@@ -121,7 +121,7 @@ jobs:
 
           mkdir -p source
 
-          unzip -q Campus-DZ-v22-Library-Integration-Fixed.zip -d source
+          unzip -q Campus-DZ-v22-Library-Admin-Interface-Fixed.zip -d source
 
           PROJECT_DIR=$(find source -type f \
             \( -name settings.gradle -o -name settings.gradle.kts \) \
@@ -170,7 +170,7 @@ jobs:
 
           echo "Build completed."
 
-      # 11. جمع ملفات APK و AAB
+      # 11. جمع ملفات الإصدار
       - name: Collect APK and AAB
         shell: bash
         run: |
@@ -200,7 +200,7 @@ jobs:
           echo "Release files collected:"
           ls -lh release/
 
-      # 12. رفع ملفات الإصدار
+      # 12. رفع APK و AAB
       - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
@@ -208,4 +208,3 @@ jobs:
           path: release/*
           if-no-files-found: error
           retention-days: 30
-          
