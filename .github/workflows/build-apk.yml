@@ -111,7 +111,9 @@ jobs:
             exit 1
           fi
 
-          echo "Campus DZ v22 ZIP found."
+          unzip -t "$ZIP_FILE"
+
+          echo "Campus DZ v22 ZIP found and verified."
 
       # 8. استخراج المشروع
       - name: Extract Campus DZ
@@ -138,7 +140,7 @@ jobs:
 
           echo "Project found: $PROJECT_DIR"
 
-      # 9. التحقق من ملفات Android
+      # 9. التحقق من ملفات Android ورابط المكتبة
       - name: Verify Android project
         shell: bash
         run: |
@@ -155,7 +157,19 @@ jobs:
             exit 1
           fi
 
-          echo "Android project verified."
+          if grep -R -n "functions/v1/clever-responder" \
+            "$PROJECT_DIR/app/src/main"; then
+            echo "ERROR: Old clever-responder URL still exists"
+            exit 1
+          fi
+
+          if ! grep -R -n "functions/v1/library-api" \
+            "$PROJECT_DIR/app/src/main"; then
+            echo "ERROR: library-api URL not found"
+            exit 1
+          fi
+
+          echo "Android project and library endpoint verified."
 
       # 10. بناء APK و AAB
       - name: Build signed APK and AAB
@@ -209,4 +223,3 @@ jobs:
           path: release/*
           if-no-files-found: error
           retention-days: 30
-          
