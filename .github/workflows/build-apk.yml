@@ -1,4 +1,8 @@
+هذا هو ملف GitHub Actions كامل بعد تصحيح اسم ZIP ليتوافق مع الملف الذي رفعته أنت: `Campus-DZ-v22-Clever-Responder-Fixed.zip`.
 
+انسخ الكود كاملًا وعوّض به محتوى ملف Workflow الحالي:
+
+```yaml
 name: Build Campus DZ v22 PDF Fixed APK and AAB
 
 on:
@@ -103,7 +107,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-PDF-Fixed.zip"
+          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: $ZIP_FILE not found in repository root"
@@ -111,7 +115,7 @@ jobs:
             exit 1
           fi
 
-          echo "Campus DZ v22 PDF Fixed ZIP found."
+          echo "Campus DZ v22 ZIP found."
 
       # 8. استخراج المشروع
       - name: Extract Campus DZ
@@ -119,7 +123,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-PDF-Fixed.zip"
+          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed.zip"
 
           mkdir -p source
           unzip -q "$ZIP_FILE" -d source
@@ -209,3 +213,8 @@ jobs:
           path: release/*
           if-no-files-found: error
           retention-days: 30
+```
+
+مهم: تأكد أن ملف ZIP موجود في جذر مستودع GitHub، وليس داخل مجلد فرعي.
+
+بعد الحفظ، شغّل Actions. ابعثلي نتيجة البناء، خاصة إذا ظهر خطأ أحمر، ونكمل معاك من نفس النقطة.
