@@ -103,7 +103,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-PDF-Fixed-Release (4).zip"
+          ZIP_FILE="Campus-DZ-v22-Library-API-Fixed.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: $ZIP_FILE not found in repository root"
@@ -121,20 +121,23 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-PDF-Fixed-Release (4).zip"
+          ZIP_FILE="Campus-DZ-v22-Library-API-Fixed.zip"
 
           mkdir -p source
           unzip -q "$ZIP_FILE" -d source
 
-          PROJECT_DIR=$(find source -type f \
+          PROJECT_FILE=$(find source -type f \
             \( -name settings.gradle -o -name settings.gradle.kts \) \
-            -print -quit | xargs -r dirname)
+            -print -quit)
 
-          if [ -z "$PROJECT_DIR" ]; then
+          if [ -z "$PROJECT_FILE" ]; then
             echo "ERROR: Gradle project not found in ZIP"
-            find source -maxdepth 5 -type f
+            echo "Files found inside ZIP:"
+            find source -maxdepth 5 -type f | head -200
             exit 1
           fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_FILE")
 
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
 
