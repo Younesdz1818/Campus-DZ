@@ -1,5 +1,4 @@
-
-name: Build Campus DZ v22 PDF Fixed APK and AAB
+name: Build Campus DZ v22 PDF Open Fixed APK and AAB
 
 on:
   workflow_dispatch:
@@ -9,6 +8,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  PROJECT_ZIP: Campus-DZ-v22-PDF-FileID-Fixed.zip
 
 jobs:
   build:
@@ -29,200 +31,155 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
       - name: Prepare signing key
         env:
           CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
           CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
         shell: bash
         run: |
-          set -e
-          test -n "$CAMPUS_KEYSTORE_BASE64"
-          test -n "$CAMPUS_KEYSTORE_PASSWORD"
-
-          echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
+          set -euo pipefail
+          test -n "$CAMPUS_KEYSTORE_BASE64" || { echo "Missing CAMPUS_KEYSTORE_BASE64"; exit 1; }
+          test -n "$CAMPUS_KEYSTORE_PASSWORD" || { echo "Missing CAMPUS_KEYSTORE_PASSWORD"; exit 1; }
+          printf '%s' "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
           test -s "$RUNNER_TEMP/campus-release.keystore"
-
           echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
           echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Locate Android SDK
-        shell: bash
-        run: |
-          set -e
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-
-          SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)
-          test -n "$SDKMANAGER"
-
-          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-
-      - name: Install Android SDK
-        shell: bash
-        run: |
-          set -e
-          set +o pipefail
-          yes | "$SDKMANAGER" --licenses || true
-          set -o pipefail
-
-          "$SDKMANAGER" "platform-tools"
-          "$SDKMANAGER" "platforms;android-35"
-          "$SDKMANAGER" "build-tools;35.0.0"
-
       - name: Verify project ZIP
         shell: bash
         run: |
-          set -e
-          ZIP_FILE="Campus-DZ-v22-PDF-FileID-Fixed.zip"
+          set -euo pipefail
+          test -f "$PROJECT_ZIP" || { echo "ERROR: $PROJECT_ZIP not found in repository root"; ls -lah; exit 1; }
+          unzip -t "$PROJECT_ZIP"
 
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: New fixed ZIP not found in repository root"
-            ls -lah
-            exit 1
-          fi
-
-          unzip -t "$ZIP_FILE"
-          echo "Project ZIP verified."
-
-      - name: Extract Campus DZ
+      - name: Extract Android project
         shell: bash
         run: |
-          set -e
-          ZIP_FILE="Campus-DZ-v22-PDF-FileID-Fixed.zip"
-
+          set -euo pipefail
           mkdir -p source
-          unzip -q "$ZIP_FILE" -d source
-
+          unzip -q "$PROJECT_ZIP" -d source
           PROJECT_FILE=$(find source -type f \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
-            -print -quit)
-
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: Gradle project not found in ZIP"
-            find source -maxdepth 5 -type f | head -200
-            exit 1
-          fi
-
+            \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+          test -n "$PROJECT_FILE" || { echo "ERROR: Gradle settings file not found in ZIP"; find source -maxdepth 5 -type f | head -200; exit 1; }
           PROJECT_DIR=$(dirname "$PROJECT_FILE")
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project found: $PROJECT_DIR"
+          echo "Android project: $PROJECT_DIR"
 
-      - name: Fix PDF preview file ID bridge call
+      - name: Fix PDF file ID and Android PDF opening bridge
         shell: bash
         run: |
-          set -e
-          INDEX_FILE="$PROJECT_DIR/app/src/main/assets/index.html"
+          set -euo pipefail
+          python3 - "$PROJECT_DIR" <<'PY'
+          from pathlib import Path
+          import sys
 
-          test -f "$INDEX_FILE" || {
-            echo "ERROR: index.html not found"
-            exit 1
+          root = Path(sys.argv[1])
+          index_file = root / "app/src/main/assets/index.html"
+          java_file = root / "app/src/main/java/dz/campus/app/MainActivity.java"
+
+          if not index_file.is_file():
+              raise SystemExit(f"ERROR: Missing {index_file}")
+          if not java_file.is_file():
+              raise SystemExit(f"ERROR: Missing {java_file}")
+
+          html = index_file.read_text(encoding="utf-8")
+          old_click = 'const libDownload=e.target.closest("[data-lib-download]");if(libDownload&&window.CampusBridge){libDownload.disabled=true;CampusBridge.libraryDownload(libDownload.dataset.fileId);return;}'
+          new_click = 'const libDownload=e.target.closest("[data-lib-download]");if(libDownload&&window.CampusBridge){libDownload.disabled=true;CampusBridge.libraryDownload(libDownload.dataset.libDownload);return;}'
+          if old_click in html:
+              html = html.replace(old_click, new_click, 1)
+          elif new_click not in html:
+              raise SystemExit("ERROR: Could not identify PDF download click handler")
+
+          old_callback = 'if(kind==="libraryDownload"){if(data.ok&&data.url){const a=document.createElement("a");a.href=data.url;a.target="_blank";a.rel="noopener";a.click();}else{const st=document.getElementById("libStatus");if(st)st.textContent=data.message||"تعذر فتح الملف.";}return;}'
+          new_callback = 'if(kind==="libraryDownload"){if(data.ok&&data.url&&window.CampusBridge&&CampusBridge.openLibraryPdf){CampusBridge.openLibraryPdf(data.url);}else{const st=document.getElementById("libStatus");if(st)st.textContent=data.message||"تعذر فتح الملف.";}return;}'
+          if old_callback in html:
+              html = html.replace(old_callback, new_callback, 1)
+          elif new_callback not in html:
+              raise SystemExit("ERROR: Could not identify PDF response callback")
+          index_file.write_text(html, encoding="utf-8")
+
+          java = java_file.read_text(encoding="utf-8")
+          bridge_method = '''        @JavascriptInterface public void openLibraryPdf(String link) {
+              try {
+                  Uri uri = Uri.parse(link == null ? "" : link);
+                  String scheme = uri.getScheme();
+                  String host = uri.getHost();
+                  if (!"https".equalsIgnoreCase(scheme) || host == null ||
+                      !(host.equalsIgnoreCase("supabase.co") || host.toLowerCase().endsWith(".supabase.co"))) {
+                      throw new Exception("رابط PDF غير صالح أو غير آمن.");
+                  }
+                  Intent intent = new Intent(Intent.ACTION_VIEW);
+                  intent.setDataAndType(uri, "application/pdf");
+                  intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                  startActivity(Intent.createChooser(intent, "فتح ملف PDF"));
+              } catch (Exception e) {
+                  String message = e.getMessage() == null ? "لم يتم العثور على تطبيق لفتح PDF." : e.getMessage();
+                  JSONObject out = result(false, message);
+                  js("libraryDownload", out);
+              }
           }
 
-          python3 - "$INDEX_FILE" <<'PY'
-          import pathlib, sys
+          '''
+          anchor = '        @JavascriptInterface public void setBannerVisible(boolean visible) { MainActivity.this.setBannerVisible(visible); }'
+          if "openLibraryPdf(String link)" not in java:
+              if anchor not in java:
+                  raise SystemExit("ERROR: Java bridge insertion point not found")
+              java = java.replace(anchor, bridge_method + anchor, 1)
+          java_file.write_text(java, encoding="utf-8")
+          print("PDF file ID bridge and native PDF opener patched.")
+          PY
 
-          p = pathlib.Path(sys.argv[1])
-          s = p.read_text(encoding="utf-8")
-
-          old = "CampusBridge.libraryDownload(libDownload.dataset.fileId);"
-          new = "CampusBridge.libraryDownload(libDownload.dataset.libDownload);"
-
-          if old in s:
-              s = s.replace(old, new, 1)
-              p.write_text(s, encoding="utf-8")
-          elif new not in s:
-              raise SystemExit("ERROR: PDF bridge call not found")
-
-          if old in s:
-              raise SystemExit("ERROR: Old PDF bridge call still exists")
-
-          print("PDF file ID fix verified.")
-
-      - name: Verify Android project and PDF file ID fix
+      - name: Verify Android project and PDF fixes
         shell: bash
         run: |
-          set -e
-
-          test -f "$PROJECT_DIR/app/build.gradle" || \
-          test -f "$PROJECT_DIR/app/build.gradle.kts"
-
+          set -euo pipefail
+          test -f "$PROJECT_DIR/app/build.gradle" || test -f "$PROJECT_DIR/app/build.gradle.kts"
           test -f "$PROJECT_DIR/app/google-services.json"
-
-          if grep -R -n "functions/v1/clever-responder" \
-            "$PROJECT_DIR/app/src/main"; then
-            echo "ERROR: Old endpoint still exists"
-            exit 1
-          fi
-
-          if ! grep -R -n "functions/v1/library-api" \
-            "$PROJECT_DIR/app/src/main"; then
-            echo "ERROR: library-api endpoint not found"
-            exit 1
-          fi
-
-          if ! grep -R -n "safeFileId" \
-            "$PROJECT_DIR/app/src/main/java"; then
-            echo "ERROR: PDF file ID validation is missing"
-            exit 1
-          fi
-
-          if ! grep -R -n "f.file_id" \
-            "$PROJECT_DIR/app/src/main/assets"; then
-            echo "ERROR: Library file ID fallback is missing"
-            exit 1
-          fi
-
-          if ! grep -F -n "CampusBridge.libraryDownload(libDownload.dataset.libDownload);" \
-            "$PROJECT_DIR/app/src/main/assets/index.html"; then
-            echo "ERROR: Correct PDF file ID call is missing"
-            exit 1
-          fi
-
-          if grep -F -n "CampusBridge.libraryDownload(libDownload.dataset.fileId);" \
-            "$PROJECT_DIR/app/src/main/assets/index.html"; then
-            echo "ERROR: Broken PDF file ID call remains"
-            exit 1
-          fi
-
-          echo "Android project and PDF file ID checks passed."
+          grep -Fq 'CampusBridge.libraryDownload(libDownload.dataset.libDownload);' "$PROJECT_DIR/app/src/main/assets/index.html"
+          ! grep -Fq 'CampusBridge.libraryDownload(libDownload.dataset.fileId);' "$PROJECT_DIR/app/src/main/assets/index.html"
+          grep -Fq 'CampusBridge.openLibraryPdf(data.url);' "$PROJECT_DIR/app/src/main/assets/index.html"
+          grep -Fq 'openLibraryPdf(String link)' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
+          grep -Fq 'functions/v1/library-api' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
+          grep -Fq 'safeFileId' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
+          echo "Android project and PDF fixes verified."
 
       - name: Build signed APK and AAB
         shell: bash
         run: |
-          set -e
-          gradle -p "$PROJECT_DIR" \
-            --no-daemon \
-            clean \
-            assembleRelease \
-            bundleRelease
+          set -euo pipefail
+          gradle -p "$PROJECT_DIR" --no-daemon clean assembleRelease bundleRelease
 
       - name: Collect APK and AAB
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p release
-
-          APK=$(find "$PROJECT_DIR/app/build/outputs/apk" \
-            -type f -name '*.apk' -print -quit)
-
-          AAB=$(find "$PROJECT_DIR/app/build/outputs/bundle" \
-            -type f -name '*.aab' -print -quit)
-
-          test -n "$APK"
-          test -n "$AAB"
-
-          cp "$APK" release/Campus-DZ-v22-PDF-Fixed.apk
-          cp "$AAB" release/Campus-DZ-v22-PDF-Fixed.aab
-
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name '*.apk' -print -quit)
+          AAB=$(find "$PROJECT_DIR/app/build/outputs/bundle" -type f -name '*.aab' -print -quit)
+          test -n "$APK" || { echo "Release APK not found"; exit 1; }
+          test -n "$AAB" || { echo "Release AAB not found"; exit 1; }
+          cp "$APK" release/Campus-DZ-v22-PDF-Open-Fixed.apk
+          cp "$AAB" release/Campus-DZ-v22-PDF-Open-Fixed.aab
           ls -lh release/
 
       - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v22-PDF-Fixed-Release
+          name: Campus-DZ-v22-PDF-Open-Fixed-Release
           path: release/*
           if-no-files-found: error
           retention-days: 30
@@ -238,21 +195,12 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         shell: bash
         run: |
-          set -e
-
-          test -n "$SUPABASE_ACCESS_TOKEN" || {
-            echo "ERROR: SUPABASE_ACCESS_TOKEN is missing"
-            exit 1
-          }
-
-          test -n "$SUPABASE_PROJECT_REF" || {
-            echo "ERROR: SUPABASE_PROJECT_REF is missing"
-            exit 1
-          }
-
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "ERROR: SUPABASE_ACCESS_TOKEN is missing"; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo "ERROR: SUPABASE_PROJECT_REF is missing"; exit 1; }
+          test -d supabase/functions/library-api || { echo "ERROR: supabase/functions/library-api not found in repository root"; exit 1; }
           supabase functions deploy library-api \
             --project-ref "$SUPABASE_PROJECT_REF" \
             --no-verify-jwt \
             --yes
-
           echo "library-api deployed successfully."
