@@ -110,6 +110,37 @@ jobs:
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Project found: $PROJECT_DIR"
 
+      - name: Fix PDF preview file ID bridge call
+        shell: bash
+        run: |
+          set -e
+          INDEX_FILE="$PROJECT_DIR/app/src/main/assets/index.html"
+
+          test -f "$INDEX_FILE" || {
+            echo "ERROR: index.html not found"
+            exit 1
+          }
+
+          python3 - "$INDEX_FILE" <<'PY'
+          import pathlib, sys
+
+          p = pathlib.Path(sys.argv[1])
+          s = p.read_text(encoding="utf-8")
+
+          old = "CampusBridge.libraryDownload(libDownload.dataset.fileId);"
+          new = "CampusBridge.libraryDownload(libDownload.dataset.libDownload);"
+
+          if old in s:
+              s = s.replace(old, new, 1)
+              p.write_text(s, encoding="utf-8")
+          elif new not in s:
+              raise SystemExit("ERROR: PDF bridge call not found")
+
+          if old in s:
+              raise SystemExit("ERROR: Old PDF bridge call still exists")
+
+          print("PDF file ID fix verified.")
+
       - name: Verify Android project and PDF file ID fix
         shell: bash
         run: |
@@ -141,6 +172,18 @@ jobs:
           if ! grep -R -n "f.file_id" \
             "$PROJECT_DIR/app/src/main/assets"; then
             echo "ERROR: Library file ID fallback is missing"
+            exit 1
+          fi
+
+          if ! grep -F -n "CampusBridge.libraryDownload(libDownload.dataset.libDownload);" \
+            "$PROJECT_DIR/app/src/main/assets/index.html"; then
+            echo "ERROR: Correct PDF file ID call is missing"
+            exit 1
+          fi
+
+          if grep -F -n "CampusBridge.libraryDownload(libDownload.dataset.fileId);" \
+            "$PROJECT_DIR/app/src/main/assets/index.html"; then
+            echo "ERROR: Broken PDF file ID call remains"
             exit 1
           fi
 
