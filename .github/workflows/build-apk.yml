@@ -103,7 +103,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed.zip"
+          ZIP_FILE="Campus-DZ-v22-PDF-Fixed-Release (4).zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: $ZIP_FILE not found in repository root"
@@ -113,7 +113,7 @@ jobs:
 
           unzip -t "$ZIP_FILE"
 
-          echo "Campus DZ v22 ZIP found and verified."
+          echo "Project ZIP found and verified."
 
       # 8. استخراج المشروع
       - name: Extract Campus DZ
@@ -121,7 +121,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed(1).zip"
+          ZIP_FILE="Campus-DZ-v22-PDF-Fixed-Release (4).zip"
 
           mkdir -p source
           unzip -q "$ZIP_FILE" -d source
@@ -131,7 +131,7 @@ jobs:
             -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle settings file not found"
+            echo "ERROR: Gradle project not found in ZIP"
             find source -maxdepth 5 -type f
             exit 1
           fi
