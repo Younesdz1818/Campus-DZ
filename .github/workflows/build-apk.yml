@@ -15,24 +15,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. تحميل المستودع
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. إعداد Java 17
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3. إعداد Gradle
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      # 4. تجهيز مفتاح التوقيع
       - name: Prepare signing key
         env:
           CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
@@ -40,53 +36,34 @@ jobs:
         shell: bash
         run: |
           set -e
-
-          test -n "$CAMPUS_KEYSTORE_BASE64" || {
-            echo "ERROR: CAMPUS_KEYSTORE_BASE64 is missing"
-            exit 1
-          }
-
-          test -n "$CAMPUS_KEYSTORE_PASSWORD" || {
-            echo "ERROR: CAMPUS_KEYSTORE_PASSWORD is missing"
-            exit 1
-          }
+          test -n "$CAMPUS_KEYSTORE_BASE64"
+          test -n "$CAMPUS_KEYSTORE_PASSWORD"
 
           echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
-
           test -s "$RUNNER_TEMP/campus-release.keystore"
 
           echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
           echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
-          echo "Signing key prepared."
-
-      # 5. تحديد Android SDK
       - name: Locate Android SDK
         shell: bash
         run: |
           set -e
-
           export ANDROID_HOME=/usr/local/lib/android/sdk
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
           SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found"
-            exit 1
-          fi
+          test -n "$SDKMANAGER"
 
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
-      # 6. تثبيت Android SDK
       - name: Install Android SDK
         shell: bash
         run: |
           set -e
-
           set +o pipefail
           yes | "$SDKMANAGER" --licenses || true
           set -o pipefail
@@ -95,34 +72,26 @@ jobs:
           "$SDKMANAGER" "platforms;android-35"
           "$SDKMANAGER" "build-tools;35.0.0"
 
-          echo "Android SDK installed."
-
-      # 7. التحقق من ZIP الصحيح
       - name: Verify project ZIP
         shell: bash
         run: |
           set -e
-
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed(1).zip"
+          ZIP_FILE="Campus-DZ-v22-PDF-FileID-Fixed.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP not found:"
-            echo "$ZIP_FILE"
+            echo "ERROR: New fixed ZIP not found in repository root"
             ls -lah
             exit 1
           fi
 
           unzip -t "$ZIP_FILE"
-
           echo "Project ZIP verified."
 
-      # 8. استخراج المشروع
       - name: Extract Campus DZ
         shell: bash
         run: |
           set -e
-
-          ZIP_FILE="Campus-DZ-v22-Clever-Responder-Fixed(1).zip"
+          ZIP_FILE="Campus-DZ-v22-PDF-FileID-Fixed.zip"
 
           mkdir -p source
           unzip -q "$ZIP_FILE" -d source
@@ -138,62 +107,59 @@ jobs:
           fi
 
           PROJECT_DIR=$(dirname "$PROJECT_FILE")
-
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
-
           echo "Project found: $PROJECT_DIR"
 
-      # 9. التحقق من مشروع Android ورابط المكتبة
-      - name: Verify Android project
+      - name: Verify Android project and PDF file ID fix
         shell: bash
         run: |
           set -e
 
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app Gradle file not found"
-            exit 1
-          fi
+          test -f "$PROJECT_DIR/app/build.gradle" || \
+          test -f "$PROJECT_DIR/app/build.gradle.kts"
 
-          if [ ! -f "$PROJECT_DIR/app/google-services.json" ]; then
-            echo "ERROR: google-services.json not found"
-            exit 1
-          fi
+          test -f "$PROJECT_DIR/app/google-services.json"
 
           if grep -R -n "functions/v1/clever-responder" \
             "$PROJECT_DIR/app/src/main"; then
-            echo "ERROR: Old clever-responder URL still exists"
+            echo "ERROR: Old endpoint still exists"
             exit 1
           fi
 
           if ! grep -R -n "functions/v1/library-api" \
             "$PROJECT_DIR/app/src/main"; then
-            echo "ERROR: library-api URL not found"
+            echo "ERROR: library-api endpoint not found"
             exit 1
           fi
 
-          echo "Android project verified."
+          if ! grep -R -n "safeFileId" \
+            "$PROJECT_DIR/app/src/main/java"; then
+            echo "ERROR: PDF file ID validation is missing"
+            exit 1
+          fi
 
-      # 10. بناء APK و AAB
+          if ! grep -R -n "f.file_id" \
+            "$PROJECT_DIR/app/src/main/assets"; then
+            echo "ERROR: Library file ID fallback is missing"
+            exit 1
+          fi
+
+          echo "Android project and PDF file ID checks passed."
+
       - name: Build signed APK and AAB
         shell: bash
         run: |
           set -e
-
           gradle -p "$PROJECT_DIR" \
             --no-daemon \
             clean \
             assembleRelease \
             bundleRelease
 
-          echo "Build completed."
-
-      # 11. جمع ملفات الإصدار
       - name: Collect APK and AAB
         shell: bash
         run: |
           set -e
-
           mkdir -p release
 
           APK=$(find "$PROJECT_DIR/app/build/outputs/apk" \
@@ -202,22 +168,14 @@ jobs:
           AAB=$(find "$PROJECT_DIR/app/build/outputs/bundle" \
             -type f -name '*.aab' -print -quit)
 
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK not generated"
-            exit 1
-          fi
-
-          if [ -z "$AAB" ]; then
-            echo "ERROR: AAB not generated"
-            exit 1
-          fi
+          test -n "$APK"
+          test -n "$AAB"
 
           cp "$APK" release/Campus-DZ-v22-PDF-Fixed.apk
           cp "$AAB" release/Campus-DZ-v22-PDF-Fixed.aab
 
           ls -lh release/
 
-      # 12. رفع APK و AAB
       - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
         with:
@@ -226,13 +184,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # 13. تثبيت Supabase CLI
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      # 14. نشر دالة المكتبة
       - name: Deploy Supabase library-api
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
