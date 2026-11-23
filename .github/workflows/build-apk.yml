@@ -1,5 +1,4 @@
-
-name: Build Campus DZ v22 PDF Open Fixed APK and AAB
+name: Build Campus DZ v22 Internal PDF Viewer APK and AAB
 
 on:
   workflow_dispatch:
@@ -36,40 +35,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-
-          if [ ! -d "$SDK_ROOT" ]; then
-            echo "ERROR: Android SDK directory not found: $SDK_ROOT"
-            exit 1
-          fi
-
+          test -d "$SDK_ROOT" || { echo "Android SDK not found: $SDK_ROOT"; exit 1; }
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found"
-            exit 1
-          fi
-
+          test -n "$SDKMANAGER" || { echo "sdkmanager not found"; exit 1; }
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
 
-          echo "Android SDK configured:"
-          echo "$SDKMANAGER"
-
       - name: Install Android SDK packages
         shell: bash
         run: |
           set -euo pipefail
-
           yes | sdkmanager --licenses >/dev/null || true
-
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Prepare signing key
         env:
@@ -78,209 +58,346 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          test -n "$CAMPUS_KEYSTORE_BASE64" || {
-            echo "Missing CAMPUS_KEYSTORE_BASE64"
-            exit 1
-          }
-
-          test -n "$CAMPUS_KEYSTORE_PASSWORD" || {
-            echo "Missing CAMPUS_KEYSTORE_PASSWORD"
-            exit 1
-          }
-
+          test -n "$CAMPUS_KEYSTORE_BASE64" || { echo "Missing CAMPUS_KEYSTORE_BASE64"; exit 1; }
+          test -n "$CAMPUS_KEYSTORE_PASSWORD" || { echo "Missing CAMPUS_KEYSTORE_PASSWORD"; exit 1; }
           printf '%s' "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
-
           test -s "$RUNNER_TEMP/campus-release.keystore"
-
           echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
           echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Verify project ZIP
+      - name: Verify and extract project ZIP
         shell: bash
         run: |
           set -euo pipefail
-
-          test -f "$PROJECT_ZIP" || {
-            echo "ERROR: $PROJECT_ZIP not found in repository root"
-            ls -lah
-            exit 1
-          }
-
+          test -f "$PROJECT_ZIP" || { echo "Missing $PROJECT_ZIP in repository root"; ls -lah; exit 1; }
           unzip -t "$PROJECT_ZIP"
-
-      - name: Extract Android project
-        shell: bash
-        run: |
-          set -euo pipefail
-
           mkdir -p source
           unzip -q "$PROJECT_ZIP" -d source
-
-          PROJECT_FILE=$(find source -type f \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
-            -print -quit)
-
-          test -n "$PROJECT_FILE" || {
-            echo "ERROR: Gradle settings file not found in ZIP"
-            find source -maxdepth 5 -type f | head -200
-            exit 1
-          }
-
+          PROJECT_FILE=$(find source -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+          test -n "$PROJECT_FILE" || { echo "Gradle settings file not found"; exit 1; }
           PROJECT_DIR=$(dirname "$PROJECT_FILE")
-
           echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project directory: $PROJECT_DIR"
 
-          echo "Android project: $PROJECT_DIR"
-
-      - name: Fix PDF file ID and Android PDF opening bridge
+      - name: Add in-app native PDF viewer and fix library file ID
         shell: bash
         run: |
           set -euo pipefail
-
           python3 - "$PROJECT_DIR" <<'PY'
           from pathlib import Path
           import sys
 
           root = Path(sys.argv[1])
-
-          index_file = root / "app/src/main/assets/index.html"
           java_file = root / "app/src/main/java/dz/campus/app/MainActivity.java"
-
-          if not index_file.is_file():
-              raise SystemExit(f"ERROR: Missing {index_file}")
-
-          if not java_file.is_file():
-              raise SystemExit(f"ERROR: Missing {java_file}")
-
-          html = index_file.read_text(encoding="utf-8")
-
-          old_click = 'const libDownload=e.target.closest("[data-lib-download]");if(libDownload&&window.CampusBridge){libDownload.disabled=true;CampusBridge.libraryDownload(libDownload.dataset.fileId);return;}'
-
-          new_click = 'const libDownload=e.target.closest("[data-lib-download]");if(libDownload&&window.CampusBridge){libDownload.disabled=true;CampusBridge.libraryDownload(libDownload.dataset.libDownload);return;}'
-
-          if old_click in html:
-              html = html.replace(old_click, new_click, 1)
-          elif new_click not in html:
-              raise SystemExit("ERROR: Could not identify PDF download click handler")
-
-          old_callback = 'if(kind==="libraryDownload"){if(data.ok&&data.url){const a=document.createElement("a");a.href=data.url;a.target="_blank";a.rel="noopener";a.click();}else{const st=document.getElementById("libStatus");if(st)st.textContent=data.message||"تعذر فتح الملف.";}return;}'
-
-          new_callback = 'if(kind==="libraryDownload"){if(data.ok&&data.url&&window.CampusBridge&&CampusBridge.openLibraryPdf){CampusBridge.openLibraryPdf(data.url);}else{const st=document.getElementById("libStatus");if(st)st.textContent=data.message||"تعذر فتح الملف.";}return;}'
-
-          if old_callback in html:
-              html = html.replace(old_callback, new_callback, 1)
-          elif new_callback not in html:
-              raise SystemExit("ERROR: Could not identify PDF response callback")
-
-          index_file.write_text(html, encoding="utf-8")
+          html_file = root / "app/src/main/assets/index.html"
+          if not java_file.is_file() or not html_file.is_file():
+              raise SystemExit("Expected MainActivity.java or assets/index.html was not found")
 
           java = java_file.read_text(encoding="utf-8")
+          html = html_file.read_text(encoding="utf-8")
 
-          bridge_method = '''        @JavascriptInterface public void openLibraryPdf(String link) {
-              try {
-                  Uri uri = Uri.parse(link == null ? "" : link);
-                  String scheme = uri.getScheme();
-                  String host = uri.getHost();
+          # Imports for Android's built-in PdfRenderer and its native viewer UI.
+          imports = [
+              "import android.graphics.Bitmap;",
+              "import android.graphics.pdf.PdfRenderer;",
+              "import android.os.ParcelFileDescriptor;",
+              "import android.widget.ImageView;",
+              "import android.widget.ScrollView;",
+          ]
+          anchor_import = "import android.graphics.Color;"
+          if anchor_import not in java:
+              raise SystemExit("Could not find Java import insertion point")
+          for imp in imports:
+              if imp not in java:
+                  java = java.replace(anchor_import, anchor_import + "\n" + imp, 1)
 
-                  if (!"https".equalsIgnoreCase(scheme) || host == null ||
-                      !(host.equalsIgnoreCase("supabase.co") || host.toLowerCase().endsWith(".supabase.co"))) {
-                      throw new Exception("رابط PDF غير صالح أو غير آمن.");
+          fields_anchor = "    private WebView webView;"
+          fields = '''    private FrameLayout pdfOverlay;
+          private ImageView pdfPageImage;
+          private TextView pdfPageLabel;
+          private Button pdfPreviousButton;
+          private Button pdfNextButton;
+          private PdfRenderer pdfRenderer;
+          private ParcelFileDescriptor pdfFileDescriptor;
+          private int pdfCurrentPage = 0;
+          private int pdfPageCount = 0;
+          private volatile boolean pdfOpening = false;
+          '''
+          if "private PdfRenderer pdfRenderer;" not in java:
+              if fields_anchor not in java:
+                  raise SystemExit("Could not find MainActivity field insertion point")
+              java = java.replace(fields_anchor, fields_anchor + "\n" + fields, 1)
+
+          outer_methods = r'''    private void openLibraryPdfInApp(String link) {
+              if (pdfOpening) return;
+              pdfOpening = true;
+              runOnUiThread(() -> {
+                  if (pdfOverlay != null) {
+                      webFrame.removeView(pdfOverlay);
+                      pdfOverlay = null;
                   }
+                  if (bannerContainer != null) bannerContainer.setVisibility(View.GONE);
+                  showPdfLoading("جارٍ تحميل ملف PDF...");
+              });
+              networkExecutor.execute(() -> {
+                  java.io.File downloaded = null;
+                  try {
+                      Uri uri = Uri.parse(link == null ? "" : link);
+                      String scheme = uri.getScheme();
+                      String host = uri.getHost();
+                      if (!"https".equalsIgnoreCase(scheme) || host == null ||
+                          !(host.equalsIgnoreCase("supabase.co") || host.toLowerCase().endsWith(".supabase.co"))) {
+                          throw new Exception("رابط PDF غير صالح أو غير آمن.");
+                      }
+                      HttpURLConnection connection = (HttpURLConnection) new URL(link).openConnection();
+                      connection.setConnectTimeout(20000);
+                      connection.setReadTimeout(60000);
+                      connection.setInstanceFollowRedirects(true);
+                      connection.setRequestProperty("Accept", "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8");
+                      int code = connection.getResponseCode();
+                      if (code < 200 || code >= 300) throw new Exception("تعذر تحميل PDF (HTTP " + code + ").");
+                      downloaded = new java.io.File(getCacheDir(), "campus_library_preview.pdf");
+                      try (InputStream in = connection.getInputStream();
+                           java.io.FileOutputStream out = new java.io.FileOutputStream(downloaded)) {
+                          byte[] chunk = new byte[32768];
+                          int count;
+                          while ((count = in.read(chunk)) != -1) out.write(chunk, 0, count);
+                      } finally {
+                          connection.disconnect();
+                      }
+                      if (!downloaded.isFile() || downloaded.length() < 5) throw new Exception("ملف PDF فارغ أو غير صالح.");
+                      try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(downloaded, "r")) {
+                          byte[] signature = new byte[5];
+                          raf.readFully(signature);
+                          if (signature[0] != '%' || signature[1] != 'P' || signature[2] != 'D' || signature[3] != 'F' || signature[4] != '-')
+                              throw new Exception("الملف المستلم ليس بصيغة PDF.");
+                      }
+                      ParcelFileDescriptor descriptor = ParcelFileDescriptor.open(downloaded, ParcelFileDescriptor.MODE_READ_ONLY);
+                      PdfRenderer renderer = new PdfRenderer(descriptor);
+                      if (renderer.getPageCount() < 1) {
+                          renderer.close(); descriptor.close();
+                          throw new Exception("ملف PDF لا يحتوي على صفحات.");
+                      }
+                      runOnUiThread(() -> {
+                          closePdfRenderer();
+                          pdfFileDescriptor = descriptor;
+                          pdfRenderer = renderer;
+                          pdfPageCount = renderer.getPageCount();
+                          pdfCurrentPage = 0;
+                          buildPdfViewer();
+                          renderPdfPage(0);
+                      });
+                  } catch (Exception e) {
+                      String message = e.getMessage() == null ? "تعذر عرض ملف PDF داخل التطبيق." : e.getMessage();
+                      runOnUiThread(() -> {
+                          pdfOpening = false;
+                          showPdfError(message);
+                      });
+                  }
+              });
+          }
 
-                  Intent intent = new Intent(Intent.ACTION_VIEW);
-                  intent.setDataAndType(uri, "application/pdf");
-                  intent.addCategory(Intent.CATEGORY_BROWSABLE);
+          private void showPdfLoading(String message) {
+              pdfOverlay = new FrameLayout(this);
+              pdfOverlay.setBackgroundColor(Color.WHITE);
+              TextView loading = new TextView(this);
+              loading.setText(message);
+              loading.setTextSize(17);
+              loading.setTextColor(Color.rgb(25, 48, 70));
+              loading.setGravity(android.view.Gravity.CENTER);
+              pdfOverlay.addView(loading, new FrameLayout.LayoutParams(-1, -1));
+              webFrame.addView(pdfOverlay, new FrameLayout.LayoutParams(-1, -1));
+          }
 
-                  startActivity(Intent.createChooser(intent, "فتح ملف PDF"));
-
-              } catch (Exception e) {
-                  String message = e.getMessage() == null
-                      ? "لم يتم العثور على تطبيق لفتح PDF."
-                      : e.getMessage();
-
-                  JSONObject out = result(false, message);
-                  js("libraryDownload", out);
+          private void showPdfError(String message) {
+              if (pdfOverlay == null) showPdfLoading(message);
+              else {
+                  pdfOverlay.removeAllViews();
+                  TextView error = new TextView(this);
+                  error.setText(message + "\\n\\nاضغط رجوع للعودة إلى المكتبة.");
+                  error.setTextSize(16);
+                  error.setTextColor(Color.DKGRAY);
+                  error.setGravity(android.view.Gravity.CENTER);
+                  error.setPadding(dp(24), dp(24), dp(24), dp(24));
+                  pdfOverlay.addView(error, new FrameLayout.LayoutParams(-1, -1));
               }
           }
 
+          private void buildPdfViewer() {
+              pdfOverlay.removeAllViews();
+              pdfOverlay.setBackgroundColor(Color.rgb(238, 242, 247));
+              LinearLayout shell = new LinearLayout(this);
+              shell.setOrientation(LinearLayout.VERTICAL);
+              shell.setBackgroundColor(Color.rgb(238, 242, 247));
+              LinearLayout toolbar = new LinearLayout(this);
+              toolbar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+              toolbar.setPadding(dp(8), dp(6), dp(8), dp(6));
+              toolbar.setBackgroundColor(Color.rgb(16, 43, 70));
+              Button close = new Button(this);
+              close.setText("رجوع");
+              close.setTextColor(Color.WHITE);
+              close.setBackgroundColor(Color.TRANSPARENT);
+              close.setOnClickListener(v -> closePdfViewer());
+              pdfPageLabel = new TextView(this);
+              pdfPageLabel.setTextColor(Color.WHITE);
+              pdfPageLabel.setTextSize(14);
+              pdfPageLabel.setGravity(android.view.Gravity.CENTER);
+              LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
+              pdfPreviousButton = new Button(this);
+              pdfPreviousButton.setText("السابق");
+              pdfNextButton = new Button(this);
+              pdfNextButton.setText("التالي");
+              pdfPreviousButton.setOnClickListener(v -> renderPdfPage(pdfCurrentPage - 1));
+              pdfNextButton.setOnClickListener(v -> renderPdfPage(pdfCurrentPage + 1));
+              toolbar.addView(close, new LinearLayout.LayoutParams(-2, dp(48)));
+              toolbar.addView(pdfPageLabel, labelParams);
+              toolbar.addView(pdfPreviousButton, new LinearLayout.LayoutParams(-2, dp(48)));
+              toolbar.addView(pdfNextButton, new LinearLayout.LayoutParams(-2, dp(48)));
+              ScrollView scroll = new ScrollView(this);
+              pdfPageImage = new ImageView(this);
+              pdfPageImage.setAdjustViewBounds(true);
+              pdfPageImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+              pdfPageImage.setBackgroundColor(Color.WHITE);
+              pdfPageImage.setPadding(dp(4), dp(4), dp(4), dp(4));
+              scroll.addView(pdfPageImage, new ScrollView.LayoutParams(-1, -2));
+              shell.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+              shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+              pdfOverlay.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+              updatePdfControls();
+              pdfOpening = false;
+          }
+
+          private void updatePdfControls() {
+              if (pdfPageLabel != null) pdfPageLabel.setText("صفحة " + (pdfCurrentPage + 1) + " من " + pdfPageCount);
+              if (pdfPreviousButton != null) pdfPreviousButton.setEnabled(pdfCurrentPage > 0);
+              if (pdfNextButton != null) pdfNextButton.setEnabled(pdfCurrentPage < pdfPageCount - 1);
+          }
+
+          private void renderPdfPage(int pageIndex) {
+              if (pdfRenderer == null || pageIndex < 0 || pageIndex >= pdfPageCount) return;
+              pdfCurrentPage = pageIndex;
+              updatePdfControls();
+              if (pdfPageImage != null) pdfPageImage.setImageDrawable(null);
+              networkExecutor.execute(() -> {
+                  Bitmap bitmap = null;
+                  try {
+                      PdfRenderer.Page page = pdfRenderer.openPage(pageIndex);
+                      int screenWidth = Math.max(600, getResources().getDisplayMetrics().widthPixels);
+                      float ratio = (float) page.getHeight() / (float) page.getWidth();
+                      int width = Math.min(screenWidth, 1800);
+                      int height = Math.max(1, (int) (width * ratio));
+                      bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                      bitmap.eraseColor(Color.WHITE);
+                      page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                      page.close();
+                  } catch (Exception e) {
+                      android.util.Log.e("CampusDZPDF", "Page rendering failed", e);
+                  }
+                  final Bitmap rendered = bitmap;
+                  runOnUiThread(() -> {
+                      if (pdfOverlay == null || pdfRenderer == null || pdfCurrentPage != pageIndex) return;
+                      if (rendered != null) pdfPageImage.setImageBitmap(rendered);
+                      else showPdfError("تعذر عرض هذه الصفحة.");
+                      updatePdfControls();
+                  });
+              });
+          }
+
+          private void closePdfRenderer() {
+              try { if (pdfRenderer != null) pdfRenderer.close(); } catch (Exception ignored) {}
+              try { if (pdfFileDescriptor != null) pdfFileDescriptor.close(); } catch (Exception ignored) {}
+              pdfRenderer = null;
+              pdfFileDescriptor = null;
+          }
+
+          private void closePdfViewer() {
+              closePdfRenderer();
+              if (pdfOverlay != null && webFrame != null) webFrame.removeView(pdfOverlay);
+              pdfOverlay = null;
+              pdfPageImage = null;
+              pdfPageLabel = null;
+              pdfPreviousButton = null;
+              pdfNextButton = null;
+              pdfOpening = false;
+              if (bannerContainer != null) bannerContainer.setVisibility(View.GONE);
+          }
+
           '''
-
-          anchor = '        @JavascriptInterface public void setBannerVisible(boolean visible) { MainActivity.this.setBannerVisible(visible); }'
-
-          if "openLibraryPdf(String link)" not in java:
+          if "private void openLibraryPdfInApp(String link)" not in java:
+              anchor = "    private void initializeAds() {"
               if anchor not in java:
-                  raise SystemExit("ERROR: Java bridge insertion point not found")
+                  raise SystemExit("Could not find method insertion point for native PDF viewer")
+              java = java.replace(anchor, outer_methods + anchor, 1)
 
-              java = java.replace(anchor, bridge_method + anchor, 1)
+          bridge_anchor = '        @JavascriptInterface public void setBannerVisible(boolean visible) { MainActivity.this.setBannerVisible(visible); }'
+          bridge_method = '        @JavascriptInterface public void openLibraryPdf(String link) { MainActivity.this.openLibraryPdfInApp(link); }\n'
+          if "openLibraryPdf(String link)" not in java:
+              if bridge_anchor not in java:
+                  raise SystemExit("Could not find CampusBridge insertion point")
+              java = java.replace(bridge_anchor, bridge_method + bridge_anchor, 1)
+
+          old_back = '@Override public void onBackPressed(){if(webView!=null&&webView.canGoBack())webView.goBack();else super.onBackPressed();}'
+          new_back = '@Override public void onBackPressed(){if(pdfOverlay!=null){closePdfViewer();}else if(webView!=null&&webView.canGoBack()){webView.goBack();}else{super.onBackPressed();}}'
+          if old_back in java:
+              java = java.replace(old_back, new_back, 1)
+          elif new_back not in java:
+              raise SystemExit("Could not patch Android back button handler")
+
+          # Correct the dataset mapping: data-lib-download maps to dataset.libDownload.
+          old_click = 'CampusBridge.libraryDownload(libDownload.dataset.fileId);'
+          new_click = 'CampusBridge.libraryDownload(libDownload.dataset.libDownload);'
+          if old_click in html:
+              html = html.replace(old_click, new_click, 1)
+          elif new_click not in html:
+              raise SystemExit("Could not identify library PDF button handler")
+
+          old_callback = 'if(kind==="libraryDownload"){if(data.ok&&data.url){const a=document.createElement("a");a.href=data.url;a.target="_blank";a.rel="noopener";a.click();}else{const st=document.getElementById("libStatus");if(st)st.textContent=data.message||"تعذر فتح الملف.";}return;}'
+          new_callback = 'if(kind==="libraryDownload"){if(data.ok&&data.url&&window.CampusBridge){CampusBridge.openLibraryPdf(data.url);}else{const st=document.getElementById("libStatus");if(st)st.textContent=data.message||"تعذر فتح الملف.";}return;}'
+          if old_callback in html:
+              html = html.replace(old_callback, new_callback, 1)
+          elif new_callback not in html:
+              raise SystemExit("Could not identify library PDF response callback")
 
           java_file.write_text(java, encoding="utf-8")
-
-          print("PDF file ID bridge and native PDF opener patched.")
+          html_file.write_text(html, encoding="utf-8")
+          print("Internal PDF viewer patch applied.")
           PY
 
-      - name: Verify Android project and PDF fixes
+      - name: Verify internal PDF viewer patch
         shell: bash
         run: |
           set -euo pipefail
-
-          test -f "$PROJECT_DIR/app/build.gradle" || test -f "$PROJECT_DIR/app/build.gradle.kts"
-
-          test -f "$PROJECT_DIR/app/google-services.json"
-
-          grep -Fq 'CampusBridge.libraryDownload(libDownload.dataset.libDownload);' "$PROJECT_DIR/app/src/main/assets/index.html"
-
-          ! grep -Fq 'CampusBridge.libraryDownload(libDownload.dataset.fileId);' "$PROJECT_DIR/app/src/main/assets/index.html"
-
+          grep -Fq 'private void openLibraryPdfInApp(String link)' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
+          grep -Fq 'new PdfRenderer(descriptor)' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
           grep -Fq 'CampusBridge.openLibraryPdf(data.url);' "$PROJECT_DIR/app/src/main/assets/index.html"
-
-          grep -Fq 'openLibraryPdf(String link)' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
-
-          grep -Fq 'functions/v1/library-api' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
-
-          grep -Fq 'safeFileId' "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
-
-          echo "Android project and PDF fixes verified."
+          grep -Fq 'CampusBridge.libraryDownload(libDownload.dataset.libDownload);' "$PROJECT_DIR/app/src/main/assets/index.html"
+          ! grep -Fq 'a.target="_blank"' "$PROJECT_DIR/app/src/main/assets/index.html"
+          echo "Internal PDF viewer checks passed."
 
       - name: Build signed APK and AAB
         shell: bash
         run: |
           set -euo pipefail
-
           gradle -p "$PROJECT_DIR" --no-daemon clean assembleRelease bundleRelease
 
       - name: Collect APK and AAB
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p release
-
           APK=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name '*.apk' -print -quit)
-
           AAB=$(find "$PROJECT_DIR/app/build/outputs/bundle" -type f -name '*.aab' -print -quit)
-
-          test -n "$APK" || {
-            echo "Release APK not found"
-            exit 1
-          }
-
-          test -n "$AAB" || {
-            echo "Release AAB not found"
-            exit 1
-          }
-
-          cp "$APK" release/Campus-DZ-v22-PDF-Open-Fixed.apk
-
-          cp "$AAB" release/Campus-DZ-v22-PDF-Open-Fixed.aab
-
+          test -n "$APK" || { echo "Release APK not found"; exit 1; }
+          test -n "$AAB" || { echo "Release AAB not found"; exit 1; }
+          cp "$APK" release/Campus-DZ-v22-Internal-PDF-Viewer.apk
+          cp "$AAB" release/Campus-DZ-v22-Internal-PDF-Viewer.aab
           ls -lh release/
 
       - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v22-PDF-Open-Fixed-Release
+          name: Campus-DZ-v22-Internal-PDF-Viewer-Release
           path: release/*
           if-no-files-found: error
           retention-days: 30
@@ -297,26 +414,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          test -n "$SUPABASE_ACCESS_TOKEN" || {
-            echo "ERROR: SUPABASE_ACCESS_TOKEN is missing"
-            exit 1
-          }
-
-          test -n "$SUPABASE_PROJECT_REF" || {
-            echo "ERROR: SUPABASE_PROJECT_REF is missing"
-            exit 1
-          }
-
-          test -d supabase/functions/library-api || {
-            echo "ERROR: supabase/functions/library-api not found in repository root"
-            exit 1
-          }
-
-          supabase functions deploy library-api \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            --no-verify-jwt \
-            --yes
-
-          echo "library-api deployed successfully."
-          
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Missing SUPABASE_ACCESS_TOKEN"; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo "Missing SUPABASE_PROJECT_REF"; exit 1; }
+          test -d supabase/functions/library-api || { echo "supabase/functions/library-api folder not found in repository root; skip deployment if this source ZIP does not include backend"; exit 1; }
+          supabase functions deploy library-api --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --yes
