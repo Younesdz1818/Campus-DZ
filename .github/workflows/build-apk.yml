@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1)(1).zip"
+  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1)(1)(1).zip"
 
 jobs:
   build:
@@ -87,22 +87,36 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify library features and internal PDF bridge
+      - name: Verify library, PDF and interstitial ads
         shell: bash
         run: |
           set -euo pipefail
+
           JAVA_FILE="$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
           HTML_FILE="$PROJECT_DIR/app/src/main/assets/index.html"
 
-          grep -Fq 'libraryDelete' "$JAVA_FILE" || { echo "libraryDelete bridge method missing"; exit 1; }
-          grep -Fq 'libraryFavoriteAdd' "$JAVA_FILE" || { echo "libraryFavoriteAdd bridge method missing"; exit 1; }
-          grep -Fq 'libraryFavoriteRemove' "$JAVA_FILE" || { echo "libraryFavoriteRemove bridge method missing"; exit 1; }
-          grep -Fq 'libraryFavoriteList' "$JAVA_FILE" || { echo "libraryFavoriteList bridge method missing"; exit 1; }
-          grep -Fq 'openLibraryPdf' "$JAVA_FILE" || { echo "Internal PDF viewer bridge missing"; exit 1; }
-          grep -Fq 'data-lib-delete' "$HTML_FILE" || { echo "Admin/owner delete button markup missing"; exit 1; }
-          grep -Fq 'data-lib-favorite' "$HTML_FILE" || { echo "Library favorite button markup missing"; exit 1; }
+          # Library features
+          grep -Fq 'libraryDelete' "$JAVA_FILE" || { echo "libraryDelete missing"; exit 1; }
+          grep -Fq 'libraryFavoriteAdd' "$JAVA_FILE" || { echo "libraryFavoriteAdd missing"; exit 1; }
+          grep -Fq 'libraryFavoriteRemove' "$JAVA_FILE" || { echo "libraryFavoriteRemove missing"; exit 1; }
+          grep -Fq 'libraryFavoriteList' "$JAVA_FILE" || { echo "libraryFavoriteList missing"; exit 1; }
 
-          echo "Library favorites/delete and internal PDF bridge checks passed."
+          # Internal PDF viewer
+          grep -Fq 'openLibraryPdf' "$JAVA_FILE" || { echo "Internal PDF bridge missing"; exit 1; }
+          grep -Fq 'PdfRenderer' "$JAVA_FILE" || { echo "PdfRenderer missing"; exit 1; }
+
+          # Library interface
+          grep -Fq 'data-lib-delete' "$HTML_FILE" || { echo "Delete button missing"; exit 1; }
+          grep -Fq 'data-lib-favorite' "$HTML_FILE" || { echo "Favorite button missing"; exit 1; }
+
+          # Interstitial ads every 5 PDF page turns
+          grep -Fq 'pdfPageTurnsSinceAd' "$JAVA_FILE" || { echo "PDF ad counter missing"; exit 1; }
+          grep -Fq 'onInternalPdfPageTurned' "$JAVA_FILE" || { echo "PDF page turn ad handler missing"; exit 1; }
+          grep -Fq 'pdfPageTurnsSinceAd >= 5' "$JAVA_FILE" || { echo "5-page ad frequency missing"; exit 1; }
+          grep -Fq 'maybeShowInterstitial' "$JAVA_FILE" || { echo "Interstitial display method missing"; exit 1; }
+          grep -Fq 'onAdDismissedFullScreenContent' "$JAVA_FILE" || { echo "Ad reload callback missing"; exit 1; }
+
+          echo "All library, PDF and interstitial ad checks passed."
 
       - name: Build signed APK and AAB
         shell: bash
