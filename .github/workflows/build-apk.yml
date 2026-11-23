@@ -1,3 +1,4 @@
+
 name: Build Campus DZ v22 Favorites Delete APK and AAB
 
 on:
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ZIP: Campus-DZ-v22-Library-Favorites-Delete-Android.zip
+  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1).zip"
 
 jobs:
   build:
