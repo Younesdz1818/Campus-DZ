@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1).zip"
+  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1)(1).zip"
 
 jobs:
   build:
@@ -101,6 +101,7 @@ jobs:
           grep -Fq 'openLibraryPdf' "$JAVA_FILE" || { echo "Internal PDF viewer bridge missing"; exit 1; }
           grep -Fq 'data-lib-delete' "$HTML_FILE" || { echo "Admin/owner delete button markup missing"; exit 1; }
           grep -Fq 'data-lib-favorite' "$HTML_FILE" || { echo "Library favorite button markup missing"; exit 1; }
+
           echo "Library favorites/delete and internal PDF bridge checks passed."
 
       - name: Build signed APK and AAB
