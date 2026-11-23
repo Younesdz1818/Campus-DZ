@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1)(1)(1).zip"
+  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1)(1)(1)-1.zip"
 
 jobs:
   build:
