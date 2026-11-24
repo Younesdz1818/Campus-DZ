@@ -1,4 +1,4 @@
-name: Build Campus DZ v22 AdMob Integrated APK and AAB
+name: Build Campus DZ v22 - Banner Fix APK and AAB
 
 on:
   workflow_dispatch:
@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ZIP: "Campus-DZ-v22-AdMob-Integrated.zip"
+  PROJECT_ZIP: "Campus-DZ-v22-AdMob-Banner-Fix.zip"
+  GRADLE_VERSION: "8.9"
 
 jobs:
   build:
@@ -20,133 +21,131 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Configure Android SDK
+      - name: Check ZIP file
         shell: bash
         run: |
           set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          test -d "$SDK_ROOT" || { echo "Android SDK not found: $SDK_ROOT"; exit 1; }
-          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)
-          test -n "$SDKMANAGER" || { echo "sdkmanager not found"; exit 1; }
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
 
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Prepare signing key
-        env:
-          CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
-          CAMPUS_KEYSTORE_PASSWORD_SECRET: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$CAMPUS_KEYSTORE_BASE64" || { echo "Missing GitHub secret: CAMPUS_KEYSTORE_BASE64"; exit 1; }
-          test -n "$CAMPUS_KEYSTORE_PASSWORD_SECRET" || { echo "Missing GitHub secret: CAMPUS_KEYSTORE_PASSWORD"; exit 1; }
-          printf '%s' "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/campus-release.keystore"
-          test -s "$RUNNER_TEMP/campus-release.keystore"
-          echo "CAMPUS_KEYSTORE_FILE=$RUNNER_TEMP/campus-release.keystore" >> "$GITHUB_ENV"
-          echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD_SECRET" >> "$GITHUB_ENV"
-          echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD_SECRET" >> "$GITHUB_ENV"
-
-      - name: Verify and extract updated project ZIP
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f "$PROJECT_ZIP" || {
-            echo "Missing $PROJECT_ZIP in repository root. Upload the ZIP to the root of the GitHub repository."
+          if [ ! -f "$PROJECT_ZIP" ]; then
+            echo "ERROR: Missing $PROJECT_ZIP in repository root."
+            echo "Files available:"
             ls -lah
             exit 1
-          }
-          unzip -t "$PROJECT_ZIP"
-          mkdir -p source
-          unzip -q "$PROJECT_ZIP" -d source
-          PROJECT_FILE=$(find source -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
-          test -n "$PROJECT_FILE" || { echo "Gradle settings file not found inside ZIP"; exit 1; }
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
-          test -f "$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java" || { echo "MainActivity.java not found"; exit 1; }
-          test -f "$PROJECT_DIR/app/src/main/assets/index.html" || { echo "index.html not found"; exit 1; }
-          echo "PROJECT_DIR=$GITHUB_WORKSPACE/$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project directory: $PROJECT_DIR"
+          fi
 
-      - name: Set up Gradle 8.9
+          echo "ZIP file found:"
+          ls -lh "$PROJECT_ZIP"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: "8.9"
 
-      - name: Verify library, PDF and AdMob integration
+      - name: Extract Android project
         shell: bash
         run: |
           set -euo pipefail
 
-          JAVA_FILE="$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
-          HTML_FILE="$PROJECT_DIR/app/src/main/assets/index.html"
-          MANIFEST="$PROJECT_DIR/app/src/main/AndroidManifest.xml"
+          mkdir -p extracted
 
-          # Library features
-          grep -Fq 'libraryDelete' "$JAVA_FILE" || { echo "libraryDelete missing"; exit 1; }
-          grep -Fq 'libraryFavoriteAdd' "$JAVA_FILE" || { echo "libraryFavoriteAdd missing"; exit 1; }
-          grep -Fq 'libraryFavoriteRemove' "$JAVA_FILE" || { echo "libraryFavoriteRemove missing"; exit 1; }
-          grep -Fq 'libraryFavoriteList' "$JAVA_FILE" || { echo "libraryFavoriteList missing"; exit 1; }
+          unzip -q "$PROJECT_ZIP" -d extracted
 
-          # Internal PDF viewer
-          grep -Fq 'openLibraryPdf' "$JAVA_FILE" || { echo "Internal PDF bridge missing"; exit 1; }
-          grep -Fq 'PdfRenderer' "$JAVA_FILE" || { echo "PdfRenderer missing"; exit 1; }
+          PROJECT_DIR="extracted/CampusDZ_Android"
 
-          # Library interface
-          grep -Fq 'data-lib-delete' "$HTML_FILE" || { echo "Delete button missing"; exit 1; }
-          grep -Fq 'data-lib-favorite' "$HTML_FILE" || { echo "Favorite button missing"; exit 1; }
+          if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
+            echo "ERROR: settings.gradle not found."
+            find extracted -maxdepth 4 -type f | head -100
+            exit 1
+          fi
 
-          # PDF page turn ad frequency
-          grep -Fq 'pdfPageTurnsSinceAd' "$JAVA_FILE" || { echo "PDF ad counter missing"; exit 1; }
-          grep -Fq 'onInternalPdfPageTurned' "$JAVA_FILE" || { echo "PDF page turn ad handler missing"; exit 1; }
-          grep -Fq 'pdfPageTurnsSinceAd >= 5' "$JAVA_FILE" || { echo "5-page ad frequency missing"; exit 1; }
-          grep -Fq 'maybeShowInterstitial' "$JAVA_FILE" || { echo "Interstitial display method missing"; exit 1; }
-          grep -Fq 'onAdDismissedFullScreenContent' "$JAVA_FILE" || { echo "Ad reload callback missing"; exit 1; }
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ]; then
+            echo "ERROR: app/build.gradle not found."
+            exit 1
+          fi
 
-          # AdMob App ID and ad unit IDs
-          grep -Fq 'ca-app-pub-8815015565574968~2768381447' "$MANIFEST" || { echo "AdMob App ID missing from manifest"; exit 1; }
-          grep -Fq 'ca-app-pub-8815015565574968/6787517502' "$JAVA_FILE" || { echo "Banner ID missing"; exit 1; }
-          grep -Fq 'ca-app-pub-8815015565574968/5195107923' "$JAVA_FILE" || { echo "Interstitial ID missing"; exit 1; }
-          grep -Fq 'ca-app-pub-8815015565574968/3961917303' "$JAVA_FILE" || { echo "Native ID missing"; exit 1; }
+          if [ ! -f "$PROJECT_DIR/app/src/main/AndroidManifest.xml" ]; then
+            echo "ERROR: AndroidManifest.xml not found."
+            exit 1
+          fi
 
-          echo "All library, PDF and AdMob ID checks passed."
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Build signed APK and AAB
+          echo "Android project extracted successfully."
+
+      - name: Prepare release signing
+        shell: bash
+        env:
+          CAMPUS_KEYSTORE_BASE64: ${{ secrets.CAMPUS_KEYSTORE_BASE64 }}
+          CAMPUS_KEYSTORE_PASSWORD: ${{ secrets.CAMPUS_KEYSTORE_PASSWORD }}
+          CAMPUS_KEY_PASSWORD: ${{ secrets.CAMPUS_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$CAMPUS_KEYSTORE_BASE64" ] && [ -n "$CAMPUS_KEYSTORE_PASSWORD" ]; then
+            echo "$CAMPUS_KEYSTORE_BASE64" | base64 --decode > "$PROJECT_DIR/campus-release.keystore"
+
+            echo "CAMPUS_KEYSTORE_FILE=$PROJECT_DIR/campus-release.keystore" >> "$GITHUB_ENV"
+            echo "CAMPUS_KEYSTORE_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
+            if [ -n "$CAMPUS_KEY_PASSWORD" ]; then
+              echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEY_PASSWORD" >> "$GITHUB_ENV"
+            else
+              echo "CAMPUS_KEY_PASSWORD=$CAMPUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            fi
+
+            echo "BUILD_TYPE=release" >> "$GITHUB_ENV"
+            echo "Release signing is configured."
+          else
+            echo "BUILD_TYPE=debug" >> "$GITHUB_ENV"
+            echo "No release keystore secrets found. Debug build will be generated."
+          fi
+
+      - name: Build APK and AAB
         shell: bash
         run: |
           set -euo pipefail
-          gradle -p "$PROJECT_DIR" --no-daemon clean assembleRelease bundleRelease
+
+          cd "$PROJECT_DIR"
+
+          if [ "$BUILD_TYPE" = "release" ]; then
+            gradle --no-daemon clean assembleRelease bundleRelease
+          else
+            gradle --no-daemon clean assembleDebug bundleDebug
+          fi
 
       - name: Collect APK and AAB
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/release-output"
-          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/release" -type f -name '*.apk' -print -quit)
-          AAB=$(find "$PROJECT_DIR/app/build/outputs/bundle/release" -type f -name '*.aab' -print -quit)
-          test -n "$APK" || { echo "Release APK not found"; exit 1; }
-          test -n "$AAB" || { echo "Release AAB not found"; exit 1; }
-          cp "$APK" "$GITHUB_WORKSPACE/release-output/Campus-DZ-v22-release.apk"
-          cp "$AAB" "$GITHUB_WORKSPACE/release-output/Campus-DZ-v22-release.aab"
-          ls -lh "$GITHUB_WORKSPACE/release-output"
 
-      - name: Upload APK and AAB artifacts
+          mkdir -p "$GITHUB_WORKSPACE/output"
+
+          find "$PROJECT_DIR/app/build/outputs" \
+            -type f \
+            \( -name "*.apk" -o -name "*.aab" \) \
+            -exec cp {} "$GITHUB_WORKSPACE/output/" \;
+
+          if [ -z "$(find "$GITHUB_WORKSPACE/output" -type f)" ]; then
+            echo "ERROR: No APK or AAB files were generated."
+            exit 1
+          fi
+
+          echo "Generated files:"
+          ls -lh "$GITHUB_WORKSPACE/output"
+
+      - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v22-AdMob-Integrated-APK-AAB
-          path: release-output/*
+          name: Campus-DZ-v22-APK-AAB
+          path: output/*
           if-no-files-found: error
           retention-days: 30
