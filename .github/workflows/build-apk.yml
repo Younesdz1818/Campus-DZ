@@ -1,5 +1,4 @@
-
-name: Build Campus DZ v22 Favorites Delete APK and AAB
+name: Build Campus DZ v22 AdMob Integrated APK and AAB
 
 on:
   workflow_dispatch:
@@ -11,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ZIP: "Campus-DZ-v22-Library-Favorites-Delete-Android(1)(1)(1)-1.zip"
+  PROJECT_ZIP: "Campus-DZ-v22-AdMob-Integrated.zip"
 
 jobs:
   build:
@@ -87,13 +86,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify library, PDF and interstitial ads
+      - name: Verify library, PDF and AdMob integration
         shell: bash
         run: |
           set -euo pipefail
 
           JAVA_FILE="$PROJECT_DIR/app/src/main/java/dz/campus/app/MainActivity.java"
           HTML_FILE="$PROJECT_DIR/app/src/main/assets/index.html"
+          MANIFEST="$PROJECT_DIR/app/src/main/AndroidManifest.xml"
 
           # Library features
           grep -Fq 'libraryDelete' "$JAVA_FILE" || { echo "libraryDelete missing"; exit 1; }
@@ -109,14 +109,20 @@ jobs:
           grep -Fq 'data-lib-delete' "$HTML_FILE" || { echo "Delete button missing"; exit 1; }
           grep -Fq 'data-lib-favorite' "$HTML_FILE" || { echo "Favorite button missing"; exit 1; }
 
-          # Interstitial ads every 5 PDF page turns
+          # PDF page turn ad frequency
           grep -Fq 'pdfPageTurnsSinceAd' "$JAVA_FILE" || { echo "PDF ad counter missing"; exit 1; }
           grep -Fq 'onInternalPdfPageTurned' "$JAVA_FILE" || { echo "PDF page turn ad handler missing"; exit 1; }
           grep -Fq 'pdfPageTurnsSinceAd >= 5' "$JAVA_FILE" || { echo "5-page ad frequency missing"; exit 1; }
           grep -Fq 'maybeShowInterstitial' "$JAVA_FILE" || { echo "Interstitial display method missing"; exit 1; }
           grep -Fq 'onAdDismissedFullScreenContent' "$JAVA_FILE" || { echo "Ad reload callback missing"; exit 1; }
 
-          echo "All library, PDF and interstitial ad checks passed."
+          # AdMob App ID and ad unit IDs
+          grep -Fq 'ca-app-pub-8815015565574968~2768381447' "$MANIFEST" || { echo "AdMob App ID missing from manifest"; exit 1; }
+          grep -Fq 'ca-app-pub-8815015565574968/6787517502' "$JAVA_FILE" || { echo "Banner ID missing"; exit 1; }
+          grep -Fq 'ca-app-pub-8815015565574968/5195107923' "$JAVA_FILE" || { echo "Interstitial ID missing"; exit 1; }
+          grep -Fq 'ca-app-pub-8815015565574968/3961917303' "$JAVA_FILE" || { echo "Native ID missing"; exit 1; }
+
+          echo "All library, PDF and AdMob ID checks passed."
 
       - name: Build signed APK and AAB
         shell: bash
@@ -140,7 +146,7 @@ jobs:
       - name: Upload APK and AAB artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Campus-DZ-v22-Favorites-Delete-APK-AAB
+          name: Campus-DZ-v22-AdMob-Integrated-APK-AAB
           path: release-output/*
           if-no-files-found: error
           retention-days: 30
